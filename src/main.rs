@@ -1,7 +1,7 @@
 mod command;
 mod file;
 
-use crate::command::{run_cs_fix, CommandStatus};
+use crate::command::{CommandStatus, run_cs_fix};
 use crate::file::get_modified_files;
 use clap::Parser;
 use shadow_rs::shadow;
