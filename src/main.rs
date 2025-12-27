@@ -1,21 +1,51 @@
-use clap::Parser;
+mod command;
+mod file;
 
-#[derive(Parser)]
-#[command(version, about, long_about = None)]
+use crate::command::{CommandStatus, run_cs_fix};
+use crate::file::get_modified_files;
+use clap::Parser;
+use shadow_rs::shadow;
+use std::process;
+
+shadow!(build);
+
+#[derive(Parser, Debug)]
+#[command(
+    author = "IgnacioToledoDev",
+    version = build::CLAP_LONG_VERSION,
+    about = "Lints PHP files with cs-fixer in a docker container",
+    long_about = None
+)]
 struct Args {
-    name: String,
-    count: u8,
+    // EMPTY
 }
 
+// TODO: pending better handler of error
 fn main() {
-    println!("Hello, world!");
-    if shadow_rs::branch().is_empty() {
-        eprintln!("No branch founded!")
+    Args::parse();
+
+    if build::BRANCH.is_empty() {
+        println!("No branch founded!");
+        process::exit(CommandStatus::Failure as i32);
     }
 
-    let args = Args::parse();
-
-    for _ in 0..args.count {
-        println!("Hello, {}!", args.name);
+    let php_files = get_modified_files(); // Get all modified files in the project
+    if php_files.is_empty() {
+        println!("No PHP files modified");
+        process::exit(CommandStatus::Success as i32);
     }
+
+    for file in php_files {
+        if !run_cs_fix(&file) {
+            eprintln!("Error running cs-fixer for file {}", file);
+            process::exit(CommandStatus::FatalError as i32);
+        }
+    }
+
+    finish_process()
+}
+
+fn finish_process() {
+    println!("✅ All PHP files are clean");
+    process::exit(CommandStatus::Success as i32);
 }
