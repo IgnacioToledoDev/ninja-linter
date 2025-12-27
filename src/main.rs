@@ -3,13 +3,27 @@ mod file;
 
 use crate::command::{run_cs_fix, CommandStatus};
 use crate::file::get_modified_files;
+use clap::Parser;
 use shadow_rs::shadow;
 use std::process;
 
 shadow!(build);
 
+#[derive(Parser, Debug)]
+#[command(
+    author = "IgnacioToledoDev",
+    version = build::CLAP_LONG_VERSION,
+    about = "Lints PHP files with cs-fixer in a docker container",
+    long_about = None
+)]
+struct Args {
+    // EMPTY
+}
+
 // TODO: pending better handler of error
 fn main() {
+    Args::parse();
+
     if build::BRANCH.is_empty() {
         println!("No branch founded!");
         process::exit(CommandStatus::Failure as i32);
