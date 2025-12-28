@@ -10,18 +10,19 @@ echo "📦 Installing $BIN_NAME..."
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
-case "$OS" in
-  Linux) OS="unknown-linux-gnu" ;;
-  *) echo "❌ Unsupported OS: $OS"; exit 1 ;;
-esac
-
 case "$ARCH" in
   x86_64) ARCH="x86_64" ;;
+  aarch64|arm64) ARCH="aarch64" ;;
   *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-TARGET="${ARCH}-${OS}"
-FILENAME="${BIN_NAME}-${TARGET}.zip"
+case "$OS" in
+  Linux)  TARGET="${ARCH}-unknown-linux-gnu" ;;
+  Darwin) TARGET="${ARCH}-apple-darwin" ;;
+  *) echo "❌ Unsupported OS: $OS"; exit 1 ;;
+esac
+
+FILENAME="${BIN_NAME}-${TARGET}.tar.gz"
 URL="https://github.com/${REPO}/releases/latest/download/${FILENAME}"
 
 TMP_DIR="$(mktemp -d)"
@@ -30,7 +31,7 @@ echo "⬇️ Downloading $URL"
 curl -fsSL "$URL" -o "$TMP_DIR/$FILENAME"
 
 echo "📂 Extracting..."
-unzip -q "$TMP_DIR/$FILENAME" -d "$TMP_DIR"
+tar -xzf "$TMP_DIR/$FILENAME" -C "$TMP_DIR"
 
 chmod +x "$TMP_DIR/$BIN_NAME"
 sudo install "$TMP_DIR/$BIN_NAME" "$INSTALL_DIR/$BIN_NAME"
