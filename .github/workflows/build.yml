@@ -13,22 +13,18 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin: ninja-linter
-            archive: tar.gz
 
           - os: macos-latest
             target: x86_64-apple-darwin
             bin: ninja-linter
-            archive: tar.gz
 
           - os: macos-latest
             target: aarch64-apple-darwin
             bin: ninja-linter
-            archive: tar.gz
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: ninja-linter.exe
-            archive: zip
 
     runs-on: ${{ matrix.os }}
 
@@ -43,17 +39,21 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Package
+      - name: Package (Linux / macOS)
+        if: runner.os != 'Windows'
         shell: bash
         run: |
           mkdir -p dist
           cp target/${{ matrix.target }}/release/${{ matrix.bin }} ninja-linter
+          tar -czf dist/ninja-linter-${{ matrix.target }}.tar.gz ninja-linter
 
-          if [[ "${{ matrix.archive }}" == "tar.gz" ]]; then
-            tar -czf dist/ninja-linter-${{ matrix.target }}.tar.gz ninja-linter
-          else
-            zip dist/ninja-linter-${{ matrix.target }}.zip ninja-linter
-          fi
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/${{ matrix.bin }} ninja-linter.exe
+          Compress-Archive -Path ninja-linter.exe -DestinationPath dist/ninja-linter-${{ matrix.target }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
