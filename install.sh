@@ -24,14 +24,11 @@ esac
 TARGET="${ARCH}-${OS}"
 FILENAME="${BIN_NAME}-${TARGET}.zip"
 
-URL="https://raw.githubusercontent.com/${REPO}/main/install.sh"
+URL="https://github.com/${REPO}/releases/latest/download/${FILENAME}"
 
 echo "⬇️ Downloading $URL"
 
 curl -fsSL "$URL" -o /tmp/$BIN_NAME
-#
-#echo "Extracting"
-#unzip -q "$TMP_DIR/$FILENAME" -d "TMP_DIR"
 
 chmod +x /tmp/$BIN_NAME
 sudo mv /tmp/$BIN_NAME $INSTALL_DIR/$BIN_NAME
