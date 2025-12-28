@@ -1,9 +1,8 @@
 use std::process::Command;
 
 pub enum CommandStatus {
-    Success = 1,
-    Failure = 2,
-    FatalError = 0,
+    Success = 0,
+    FatalError = 1,
 }
 
 pub fn run_git_status() -> String {

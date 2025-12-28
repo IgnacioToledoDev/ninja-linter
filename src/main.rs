@@ -26,7 +26,7 @@ fn main() {
 
     if build::BRANCH.is_empty() {
         println!("No branch founded!");
-        process::exit(CommandStatus::Failure as i32);
+        process::exit(CommandStatus::FatalError as i32);
     }
 
     let php_files = get_modified_files(); // Get all modified files in the project
