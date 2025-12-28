@@ -14,7 +14,7 @@ Pensado para usarse como herramienta de desarrollo diaria.
 🚀 Instalación (recomendada)
 Linux /  macOS
 ```bash
-$ curl -fsSL https://github.com/IgnacioToledoDev/ninja-linter/releases/latest/download/install.sh | bash
+$ curl -fsSl https://raw.githubusercontent.com/IgnacioToledoDev/ninja-linter/main/install.sh | bash
 ```
 
 
