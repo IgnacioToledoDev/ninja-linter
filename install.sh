@@ -7,7 +7,6 @@ INSTALL_DIR="/usr/local/bin"
 
 echo "📦 Installing $BIN_NAME..."
 
-# --- Detect OS ---
 OS="$(uname -s)"
 ARCH="$(uname -m)"
 
@@ -23,15 +22,18 @@ esac
 
 TARGET="${ARCH}-${OS}"
 FILENAME="${BIN_NAME}-${TARGET}.zip"
-
 URL="https://github.com/${REPO}/releases/latest/download/${FILENAME}"
 
+TMP_DIR="$(mktemp -d)"
+
 echo "⬇️ Downloading $URL"
+curl -fsSL "$URL" -o "$TMP_DIR/$FILENAME"
 
-curl -fsSL "$URL" -o /tmp/$BIN_NAME
+echo "📂 Extracting..."
+unzip -q "$TMP_DIR/$FILENAME" -d "$TMP_DIR"
 
-chmod +x /tmp/$BIN_NAME
-sudo mv /tmp/$BIN_NAME $INSTALL_DIR/$BIN_NAME
+chmod +x "$TMP_DIR/$BIN_NAME"
+sudo install "$TMP_DIR/$BIN_NAME" "$INSTALL_DIR/$BIN_NAME"
 
 echo "✅ Installed $BIN_NAME"
 echo "➡️ Run: $BIN_NAME"

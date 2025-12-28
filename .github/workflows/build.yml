@@ -4,57 +4,6 @@ on:
   push:
     branches:
       - main
-#    tags:
-#      - "v*.*.*" TODO: Enable release workflow when testing is ready
-
-# TODO: Re-enable release workflow when testing is ready job of down this.
-#jobs:
-#  build-and-release:
-#    name: Build and release binaries
-#    runs-on: ubuntu-latest
-#
-#    strategy:
-#      matrix:
-#        target:
-#          - x86_64-unknown-linux-gnu
-#          - x86_64-apple-darwin
-#          - aarch64-apple-darwin
-#          - x86_64-pc-windows-msvc
-#
-#    steps:
-#      - name: Checkout repository
-#        uses: actions/checkout@v4
-#
-#      - name: Install Rust toolchain
-#        uses: dtolnay/rust-toolchain@stable
-#        with:
-#          targets: ${{ matrix.target }}
-#
-#      - name: Build binary
-#        run: cargo build --release --target ${{ matrix.target }}
-#
-#      - name: Prepare binary
-#        shell: bash
-#        run: |
-#          BIN_NAME="ninja-linter"
-#          TARGET="${{ matrix.target }}"
-#          OUT_DIR="dist"
-#          mkdir -p $OUT_DIR
-#
-#          if [[ "$TARGET" == *"windows"* ]]; then
-#            cp target/$TARGET/release/$BIN_NAME.exe $OUT_DIR/$BIN_NAME-$TARGET.exe
-#          else
-#            cp target/$TARGET/release/$BIN_NAME $OUT_DIR/$BIN_NAME-$TARGET
-#          fi
-#
-#      - name: Upload release assets
-#        uses: softprops/action-gh-release@v2
-#        with:
-#          files: dist/*
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
 
 jobs:
   build:
@@ -64,18 +13,22 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             bin: ninja-linter
+            archive: tar.gz
 
           - os: macos-latest
             target: x86_64-apple-darwin
             bin: ninja-linter
+            archive: tar.gz
 
           - os: macos-latest
             target: aarch64-apple-darwin
             bin: ninja-linter
+            archive: tar.gz
 
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             bin: ninja-linter.exe
+            archive: zip
 
     runs-on: ${{ matrix.os }}
 
@@ -90,12 +43,17 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
-      - name: Prepare binary
+      - name: Package
         shell: bash
         run: |
           mkdir -p dist
-          cp target/${{ matrix.target }}/release/${{ matrix.bin }} \
-             dist/ninja-linter-${{ matrix.target }}${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          cp target/${{ matrix.target }}/release/${{ matrix.bin }} ninja-linter
+
+          if [[ "${{ matrix.archive }}" == "tar.gz" ]]; then
+            tar -czf dist/ninja-linter-${{ matrix.target }}.tar.gz ninja-linter
+          else
+            zip dist/ninja-linter-${{ matrix.target }}.zip ninja-linter
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
