@@ -26,7 +26,7 @@ pub fn get_modified_files() -> Vec<String> {
 }
 
 fn clean_modified_file(file_path: String) -> String {
-    if file_path.starts_with("src/") {
+    if file_path.starts_with("src/") || file_path.starts_with("tests/") {
         return file_path;
     }
 
@@ -43,6 +43,15 @@ mod tests {
         assert_eq!(
             clean_modified_file(file_path),
             "src/Controller/HomeController.php"
+        );
+    }
+
+    #[test]
+    fn test_clean_modified_file_start_with_tests() {
+        let file_path = "back/tests/Controller/HomeControllerTest.php".to_string();
+        assert_eq!(
+            clean_modified_file(file_path),
+            "tests/Controller/HomeControllerTest.php"
         );
     }
 
