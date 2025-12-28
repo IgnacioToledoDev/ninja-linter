@@ -1,7 +1,7 @@
 mod command;
 mod file;
 
-use crate::command::{CommandStatus, run_cs_fix};
+use crate::command::{run_cs_fix, CommandStatus};
 use crate::file::get_modified_files;
 use clap::Parser;
 use shadow_rs::shadow;
@@ -11,7 +11,7 @@ shadow!(build);
 
 #[derive(Parser, Debug)]
 #[command(
-    author = "IgnacioToledoDev",
+    author = "@IgnacioToledoDev",
     version = build::CLAP_LONG_VERSION,
     about = "Lints PHP files with cs-fixer in a docker container",
     long_about = None
@@ -38,7 +38,7 @@ fn main() {
     for file in php_files {
         if !run_cs_fix(&file) {
             eprintln!("Error running cs-fixer for file {}", file);
-            process::exit(CommandStatus::FatalError as i32);
+            process::exit(CommandStatus::FatalError as i32); // TODO: check if this is correct
         }
     }
 
