@@ -20,29 +20,38 @@ struct Args {
     // EMPTY
 }
 
-// TODO: pending better handler of error
 fn main() {
     Args::parse();
 
     if build::BRANCH.is_empty() {
-        println!("No branch founded!");
+        eprintln!("Error: No branch found!");
         process::exit(CommandStatus::FatalError as i32);
     }
 
-    let php_files = get_modified_files(); // Get all modified files in the project
+    let php_files = match get_modified_files() {
+        Ok(files) => files,
+        Err(e) => {
+            eprintln!("Error getting modified files: {}", e);
+            process::exit(CommandStatus::FatalError as i32);
+        }
+    };
+
     if php_files.is_empty() {
         println!("No PHP files modified");
         process::exit(CommandStatus::Success as i32);
     }
 
-    for file in php_files {
-        if !run_cs_fix(&file) {
-            eprintln!("Error running cs-fixer for file {}", file);
-            process::exit(CommandStatus::FatalError as i32); // TODO: check if this is correct
+    match run_cs_fix(&php_files) {
+        Ok(true) => finish_process(),
+        Ok(false) => {
+            eprintln!("Error: cs-fixer failed to clean some files");
+            process::exit(CommandStatus::FatalError as i32);
+        }
+        Err(e) => {
+            eprintln!("Error running cs-fixer: {}", e);
+            process::exit(CommandStatus::FatalError as i32);
         }
     }
-
-    finish_process()
 }
 
 fn finish_process() {
