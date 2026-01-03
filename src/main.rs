@@ -6,6 +6,8 @@ use crate::file::get_modified_files;
 use clap::Parser;
 use shadow_rs::shadow;
 use std::process;
+use colored::Colorize;
+use log::{error};
 
 shadow!(build);
 
@@ -24,20 +26,21 @@ fn main() {
     Args::parse();
 
     if build::BRANCH.is_empty() {
-        eprintln!("Error: No branch found!");
+        eprintln!("{}", "Error: No branch found!".red());
         process::exit(CommandStatus::FatalError as i32);
     }
 
     let php_files = match get_modified_files() {
         Ok(files) => files,
         Err(e) => {
-            eprintln!("Error getting modified files: {}", e);
+            println!("{}", "Error getting modified files".red());
+            error!("Error: in git status when run command {e}");
             process::exit(CommandStatus::FatalError as i32);
         }
     };
 
     if php_files.is_empty() {
-        println!("No PHP files modified");
+        println!("\n {}", "No PHP files modified".green());
         process::exit(CommandStatus::Success as i32);
     }
 
@@ -48,13 +51,14 @@ fn main() {
             process::exit(CommandStatus::FatalError as i32);
         }
         Err(e) => {
-            eprintln!("Error running cs-fixer: {}", e);
+            println!("{}", "Error running cs-fixer".red());
+            error!("Error: in cs:fix when run command {e}");
             process::exit(CommandStatus::FatalError as i32);
         }
     }
 }
 
 fn finish_process() {
-    println!("✅ All PHP files are clean");
+    println!("{}", "✅ All PHP files are clean".underline().bold());
     process::exit(CommandStatus::Success as i32);
 }
