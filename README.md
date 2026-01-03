@@ -12,11 +12,16 @@ Pensado para usarse como herramienta de desarrollo diaria.
 - Proyecto PHP con composer cs:fix
 
 🚀 Instalación (recomendada)
+
 Linux /  macOS
 ```bash
-$ curl -fsSL https://github.com/IgnacioToledoDev/ninja-linter/releases/latest/download/install.sh | bash
+$ curl -fsSl https://raw.githubusercontent.com/IgnacioToledoDev/ninja-linter/main/install.sh | bash
 ```
+Windows
 
+```bash
+$ iwr https://raw.githubusercontent.com/IgnacioToledoDev/ninja-linter/main/install.ps1 -useb | iex
+```
 
 Esto hará:
 
@@ -29,5 +34,5 @@ Esto hará:
 Luego puedes ejecutar:
 
 ```bash
-$ ninja-linter
+$ ninja-linter -h
 ```
