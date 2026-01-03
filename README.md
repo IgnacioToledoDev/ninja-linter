@@ -4,13 +4,6 @@ CLI en Rust para ejecutar PHP CS Fixer automáticamente sobre archivos .php modi
 
 Pensado para usarse como herramienta de desarrollo diaria.
 
-📦 Requisitos
-
-- Git
-- Docker
-- Composer dentro del contenedor
-- Proyecto PHP con composer cs:fix
-
 🚀 Instalación (recomendada)
 
 Linux /  macOS
@@ -22,17 +15,18 @@ Windows
 ```bash
 $ iwr https://raw.githubusercontent.com/IgnacioToledoDev/ninja-linter/main/install.ps1 -useb | iex
 ```
-
-Esto hará:
-
-- Descargar el binario correcto para tu sistema
-
-- Instalarlo en /usr/local/bin
-
-- Requerir sudo si es necesario
+⚙️ Uso
 
 Luego puedes ejecutar:
 
 ```bash
 $ ninja-linter -h
+```
+
+🗑️ Desinstalación
+
+Si deseas eliminar Ninja Linter de tu sistema:
+
+```bash
+$ curl -fsSL https://github.com/IgnacioToledoDev/ninja-linter/releases/latest/download/uninstall.sh | bash
 ```
