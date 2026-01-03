@@ -12,7 +12,7 @@ shadow!(build);
 #[derive(Parser, Debug)]
 #[command(
     author = "@IgnacioToledoDev",
-    version = build::CLAP_LONG_VERSION,
+    version = build::PKG_VERSION,
     about = "Lints PHP files with cs-fixer in a docker container",
     long_about = None
 )]
