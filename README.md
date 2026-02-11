@@ -28,5 +28,5 @@ $ ninja-linter -h
 Si deseas eliminar Ninja Linter de tu sistema:
 
 ```bash
-$ curl -fsSL https://github.com/IgnacioToledoDev/ninja-linter/releases/latest/download/uninstall.sh | bash
+$ curl -fsSL https://raw.githubusercontent.com/IgnacioToledoDev/ninja-linter/main/uninstall.sh | bash
 ```

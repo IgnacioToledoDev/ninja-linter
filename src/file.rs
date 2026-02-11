@@ -14,7 +14,7 @@ pub fn get_modified_files() -> io::Result<Vec<String>> {
 fn parse_git_status(output: &str) -> Vec<String> {
     let mut allowed_files = Vec::new();
     for line in output.lines() {
-        if line.len() < 4 {
+        if !line.ends_with(FILE_EXTENSION) {
             continue;
         }
         

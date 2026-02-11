@@ -27,27 +27,30 @@ pub fn run_cs_fix(files: &[String]) -> io::Result<bool> {
         return Ok(true);
     }
 
-    let args = build_cs_fix_args(files);
+    for file in files {
+        let args = build_cs_fix_args(file);
 
-    let status = Command::new("docker")
-        .args(&args)
-        .status()?;
+        let status = Command::new("docker")
+            .args(&args)
+            .status()?;
 
-    Ok(status.success())
+        if !status.success() {
+            return Ok(false);
+        }
+    }
+
+    Ok(true)
 }
 
-fn build_cs_fix_args(files: &[String]) -> Vec<String> {
+fn build_cs_fix_args(file: &str) -> Vec<String> {
     let container = "ninja_symfony";
-    let mut args = vec![
+    vec![
         "exec".to_string(),
         container.to_string(),
         "composer".to_string(),
         "cs:fix".to_string(),
-    ];
-    for file in files {
-        args.push(file.clone());
-    }
-    args
+        file.to_string(),
+    ]
 }
 
 #[cfg(test)]
@@ -62,8 +65,7 @@ mod tests {
 
     #[test]
     fn test_build_cs_fix_args() {
-        let files = vec!["file1.php".to_string(), "file2.php".to_string()];
-        let args = build_cs_fix_args(&files);
+        let args = build_cs_fix_args("file1.php");
         assert_eq!(
             args,
             vec![
@@ -72,22 +74,6 @@ mod tests {
                 "composer".to_string(),
                 "cs:fix".to_string(),
                 "file1.php".to_string(),
-                "file2.php".to_string(),
-            ]
-        );
-    }
-
-    #[test]
-    fn test_build_cs_fix_args_empty() {
-        let files: Vec<String> = Vec::new();
-        let args = build_cs_fix_args(&files);
-        assert_eq!(
-            args,
-            vec![
-                "exec".to_string(),
-                "ninja_symfony".to_string(),
-                "composer".to_string(),
-                "cs:fix".to_string(),
             ]
         );
     }
