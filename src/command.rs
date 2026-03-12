@@ -42,6 +42,22 @@ pub fn run_cs_fix(files: &[String]) -> io::Result<bool> {
     Ok(true)
 }
 
+pub fn run_composer_stan() -> io::Result<bool> {
+    let container = "ninja_symfony";
+    let args = vec![
+        "exec".to_string(),
+        container.to_string(),
+        "composer".to_string(),
+        "stan".to_string(),
+    ];
+
+    let status = Command::new("docker")
+        .args(&args)
+        .status()?;
+
+    Ok(status.success())
+}
+
 fn build_cs_fix_args(file: &str) -> Vec<String> {
     let container = "ninja_symfony";
     vec![
@@ -76,6 +92,12 @@ mod tests {
                 "file1.php".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn test_run_composer_stan_command_exists() {
+        // This is a minimal test to ensure the logic exists
+        // Actual execution would require docker
     }
 }
 

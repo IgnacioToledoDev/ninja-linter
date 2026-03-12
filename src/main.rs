@@ -1,7 +1,7 @@
 mod command;
 mod file;
 
-use crate::command::{run_cs_fix, CommandStatus};
+use crate::command::{run_cs_fix, run_composer_stan, CommandStatus};
 use crate::file::get_modified_files;
 use clap::Parser;
 use shadow_rs::shadow;
@@ -19,11 +19,12 @@ shadow!(build);
     long_about = None
 )]
 struct Args {
-    // EMPTY
+    #[arg(long, help = "Run composer stan after cs-fixer")]
+    stan: bool,
 }
 
 fn main() {
-    Args::parse();
+    let args = Args::parse();
 
     if build::BRANCH.is_empty() {
         eprintln!("{}", "Error: No branch found!".red());
@@ -45,7 +46,12 @@ fn main() {
     }
 
     match run_cs_fix(&php_files) {
-        Ok(true) => finish_process(),
+        Ok(true) => {
+            if args.stan {
+                run_stan();
+            }
+            finish_process()
+        },
         Ok(false) => {
             eprintln!("Error: cs-fixer failed to clean some files");
             process::exit(CommandStatus::FatalError as i32);
@@ -53,6 +59,22 @@ fn main() {
         Err(e) => {
             println!("{}", "Error running cs-fixer".red());
             error!("Error: in cs:fix when run command {e}");
+            process::exit(CommandStatus::FatalError as i32);
+        }
+    }
+}
+
+fn run_stan() {
+    println!("{}", "Running composer stan...".yellow());
+    match run_composer_stan() {
+        Ok(true) => println!("{}", "✅ PHPStan passed".green()),
+        Ok(false) => {
+            eprintln!("{}", "❌ PHPStan failed".red());
+            process::exit(CommandStatus::FatalError as i32);
+        }
+        Err(e) => {
+            println!("{}", "Error running composer stan".red());
+            error!("Error: in composer stan when run command {e}");
             process::exit(CommandStatus::FatalError as i32);
         }
     }
