@@ -58,6 +58,22 @@ pub fn run_composer_stan() -> io::Result<bool> {
     Ok(status.success())
 }
 
+pub fn run_test_command(command_str: &str) -> io::Result<bool> {
+    let parts: Vec<&str> = command_str.split_whitespace().collect();
+    if parts.is_empty() {
+        return Ok(false);
+    }
+
+    let mut cmd = Command::new(parts[0]);
+    if parts.len() > 1 {
+        cmd.args(&parts[1..]);
+    }
+
+    let status = cmd.status()?;
+
+    Ok(status.success())
+}
+
 fn build_cs_fix_args(file: &str) -> Vec<String> {
     let container = "ninja_symfony";
     vec![
@@ -98,6 +114,13 @@ mod tests {
     fn test_run_composer_stan_command_exists() {
         // This is a minimal test to ensure the logic exists
         // Actual execution would require docker
+    }
+
+    #[test]
+    fn test_run_test_command_empty() {
+        let result = run_test_command("");
+        assert!(result.is_ok());
+        assert!(!result.unwrap());
     }
 }
 
