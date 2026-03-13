@@ -1,8 +1,10 @@
 mod command;
 mod file;
+mod config;
 
-use crate::command::{run_cs_fix, run_composer_stan, CommandStatus};
+use crate::command::{run_cs_fix, run_composer_stan, run_test_command, CommandStatus};
 use crate::file::get_modified_files;
+use crate::config::Config;
 use clap::Parser;
 use shadow_rs::shadow;
 use std::process;
@@ -21,6 +23,9 @@ shadow!(build);
 struct Args {
     #[arg(long, help = "Run composer stan after cs-fixer")]
     stan: bool,
+
+    #[arg(short, long, help = "Run project tests before cs-fixer")]
+    test: bool,
 }
 
 fn main() {
@@ -29,6 +34,10 @@ fn main() {
     if build::BRANCH.is_empty() {
         eprintln!("{}", "Error: No branch found!".red());
         process::exit(CommandStatus::FatalError as i32);
+    }
+
+    if args.test {
+        run_tests();
     }
 
     let php_files = match get_modified_files() {
@@ -75,6 +84,25 @@ fn run_stan() {
         Err(e) => {
             println!("{}", "Error running composer stan".red());
             error!("Error: in composer stan when run command {e}");
+            process::exit(CommandStatus::FatalError as i32);
+        }
+    }
+}
+
+fn run_tests() {
+    let mut config = Config::load();
+    let command = config.get_or_set_test_command();
+
+    println!("{}", format!("Running tests: {}...", command).yellow());
+    match run_test_command(&command) {
+        Ok(true) => println!("{}", "✅ Tests passed".green()),
+        Ok(false) => {
+            eprintln!("{}", "❌ Tests failed".red());
+            process::exit(CommandStatus::FatalError as i32);
+        }
+        Err(e) => {
+            println!("{}", "Error running tests".red());
+            error!("Error: in tests when run command {e}");
             process::exit(CommandStatus::FatalError as i32);
         }
     }
