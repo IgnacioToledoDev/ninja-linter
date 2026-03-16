@@ -37,6 +37,7 @@ pub fn run_cs_fix(files: &[String]) -> io::Result<bool> {
         if !status.success() {
             return Ok(false);
         }
+        println!("---------------------END TO FILE: {}.-----------------------", file.to_string());
     }
 
     Ok(true)
@@ -76,6 +77,7 @@ pub fn run_test_command(command_str: &str) -> io::Result<bool> {
 
 fn build_cs_fix_args(file: &str) -> Vec<String> {
     let container = "ninja_symfony";
+    println!("Linting command for file: {}", file);
     vec![
         "exec".to_string(),
         container.to_string(),
