@@ -22,13 +22,13 @@ pub fn run_git_status() -> io::Result<String> {
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-pub fn run_cs_fix(files: &[String]) -> io::Result<bool> {
+pub fn run_cs_fix(files: &[String], container: &str) -> io::Result<bool> {
     if files.is_empty() {
         return Ok(true);
     }
 
     for file in files {
-        let args = build_cs_fix_args(file);
+        let args = build_cs_fix_args(file, container);
 
         let status = Command::new("docker")
             .args(&args)
@@ -43,8 +43,7 @@ pub fn run_cs_fix(files: &[String]) -> io::Result<bool> {
     Ok(true)
 }
 
-pub fn run_composer_stan() -> io::Result<bool> {
-    let container = "ninja_symfony";
+pub fn run_composer_stan(container: &str) -> io::Result<bool> {
     let args = vec![
         "exec".to_string(),
         container.to_string(),
@@ -75,8 +74,7 @@ pub fn run_test_command(command_str: &str) -> io::Result<bool> {
     Ok(status.success())
 }
 
-fn build_cs_fix_args(file: &str) -> Vec<String> {
-    let container = "ninja_symfony";
+fn build_cs_fix_args(file: &str, container: &str) -> Vec<String> {
     println!("Linting command for file: {}", file);
     vec![
         "exec".to_string(),
@@ -99,7 +97,7 @@ mod tests {
 
     #[test]
     fn test_build_cs_fix_args() {
-        let args = build_cs_fix_args("file1.php");
+        let args = build_cs_fix_args("file1.php", "ninja_symfony");
         assert_eq!(
             args,
             vec![
@@ -110,6 +108,22 @@ mod tests {
                 "file1.php".to_string(),
             ]
         );
+    }
+
+    #[test]
+    fn test_build_cs_fix_args_custom_container() {
+        let args = build_cs_fix_args("src/Controller/FooController.php", "my_app_container");
+        assert_eq!(args[0], "exec");
+        assert_eq!(args[1], "my_app_container");
+        assert_eq!(args[2], "composer");
+        assert_eq!(args[3], "cs:fix");
+        assert_eq!(args[4], "src/Controller/FooController.php");
+    }
+
+    #[test]
+    fn test_build_cs_fix_args_length() {
+        let args = build_cs_fix_args("file.php", "some_container");
+        assert_eq!(args.len(), 5);
     }
 
     #[test]

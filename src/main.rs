@@ -36,8 +36,11 @@ fn main() {
         process::exit(CommandStatus::FatalError as i32);
     }
 
+    let mut config = Config::load();
+    let container = config.get_or_set_container_name();
+
     if args.test {
-        run_tests();
+        run_tests(&mut config);
     }
 
     let php_files = match get_modified_files() {
@@ -54,10 +57,10 @@ fn main() {
         process::exit(CommandStatus::Success as i32);
     }
 
-    match run_cs_fix(&php_files) {
+    match run_cs_fix(&php_files, &container) {
         Ok(true) => {
             if args.stan {
-                run_stan();
+                run_stan(&container);
             }
             finish_process()
         },
@@ -73,9 +76,9 @@ fn main() {
     }
 }
 
-fn run_stan() {
+fn run_stan(container: &str) {
     println!("{}", "Running composer stan...".yellow());
-    match run_composer_stan() {
+    match run_composer_stan(container) {
         Ok(true) => println!("{}", "✅ PHPStan passed".green()),
         Ok(false) => {
             eprintln!("{}", "❌ PHPStan failed".red());
@@ -89,8 +92,7 @@ fn run_stan() {
     }
 }
 
-fn run_tests() {
-    let mut config = Config::load();
+fn run_tests(config: &mut Config) {
     let command = config.get_or_set_test_command();
 
     println!("{}", format!("Running tests: {}...", command).yellow());
