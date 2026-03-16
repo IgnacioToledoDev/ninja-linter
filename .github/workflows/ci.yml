@@ -29,9 +29,41 @@ jobs:
           components: clippy
       - run: cargo clippy -- -D warnings
 
+  bump-version:
+    name: Bump Version
+    needs: [clippy]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_ENV
+
+      - name: Update Cargo.toml
+        run: sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Update Cargo.lock
+        run: cargo update -p ninja-linter
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Cargo.toml Cargo.lock
+          git diff --cached --quiet || git commit -m "chore: bump version to $VERSION"
+          git push origin main
+
   build:
     name: Build (${{ matrix.target }})
-    needs: [clippy]
+    needs: [bump-version]
     if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       matrix:
@@ -51,6 +83,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
