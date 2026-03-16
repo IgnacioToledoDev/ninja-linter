@@ -13,22 +13,19 @@ pub fn run_git_status() -> io::Result<String> {
 
     if !output.status.success() {
         let error = String::from_utf8_lossy(&output.stderr);
-        return Err(io::Error::new(
-            io::ErrorKind::Other,
-            format!("Git command failed: {}", error),
-        ));
+        return Err(io::Error::other(format!("Git command failed: {}", error)));
     }
 
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
-pub fn run_cs_fix(files: &[String], container: &str) -> io::Result<bool> {
+pub fn run_cs_fix(files: &[String], container: &str, silent: bool) -> io::Result<bool> {
     if files.is_empty() {
         return Ok(true);
     }
 
     for file in files {
-        let args = build_cs_fix_args(file, container);
+        let args = build_cs_fix_args(file, container, silent);
 
         let status = Command::new("docker")
             .args(&args)
@@ -37,7 +34,9 @@ pub fn run_cs_fix(files: &[String], container: &str) -> io::Result<bool> {
         if !status.success() {
             return Ok(false);
         }
-        println!("---------------------END TO FILE: {}.-----------------------", file.to_string());
+        if !silent {
+            println!("---------------------END TO FILE: {}.-----------------------", file);
+        }
     }
 
     Ok(true)
@@ -74,8 +73,10 @@ pub fn run_test_command(command_str: &str) -> io::Result<bool> {
     Ok(status.success())
 }
 
-fn build_cs_fix_args(file: &str, container: &str) -> Vec<String> {
-    println!("Linting command for file: {}", file);
+fn build_cs_fix_args(file: &str, container: &str, silent: bool) -> Vec<String> {
+    if !silent {
+        println!("Linting command for file: {}", file);
+    }
     vec![
         "exec".to_string(),
         container.to_string(),
@@ -97,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_build_cs_fix_args() {
-        let args = build_cs_fix_args("file1.php", "ninja_symfony");
+        let args = build_cs_fix_args("file1.php", "ninja_symfony", false);
         assert_eq!(
             args,
             vec![
@@ -112,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_build_cs_fix_args_custom_container() {
-        let args = build_cs_fix_args("src/Controller/FooController.php", "my_app_container");
+        let args = build_cs_fix_args("src/Controller/FooController.php", "my_app_container", false);
         assert_eq!(args[0], "exec");
         assert_eq!(args[1], "my_app_container");
         assert_eq!(args[2], "composer");
@@ -122,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_build_cs_fix_args_length() {
-        let args = build_cs_fix_args("file.php", "some_container");
+        let args = build_cs_fix_args("file.php", "some_container", false);
         assert_eq!(args.len(), 5);
     }
 
