@@ -1,6 +1,7 @@
 mod command;
 mod file;
 mod config;
+mod parallel;
 
 use crate::command::{run_cs_fix, run_composer_stan, run_test_command, CommandStatus};
 use crate::file::get_modified_files;
@@ -26,6 +27,9 @@ struct Args {
 
     #[arg(short, long, help = "Run project tests before cs-fixer")]
     test: bool,
+
+    #[arg(short = 'p', long, help = "Run all tasks in parallel with live status")]
+    parallel: bool,
 }
 
 fn main() {
@@ -39,7 +43,7 @@ fn main() {
     let mut config = Config::load();
     let container = config.get_or_set_container_name();
 
-    if args.test {
+    if args.test && !args.parallel {
         run_tests(&mut config);
     }
 
@@ -57,21 +61,34 @@ fn main() {
         process::exit(CommandStatus::Success as i32);
     }
 
-    match run_cs_fix(&php_files, &container) {
-        Ok(true) => {
-            if args.stan {
-                run_stan(&container);
-            }
-            finish_process()
-        },
-        Ok(false) => {
-            eprintln!("Error: cs-fixer failed to clean some files");
+    if args.parallel {
+        let test_cmd = if args.test {
+            Some(config.get_or_set_test_command())
+        } else {
+            None
+        };
+        let success = parallel::run_parallel(php_files, container, test_cmd, args.stan);
+        if !success {
             process::exit(CommandStatus::FatalError as i32);
         }
-        Err(e) => {
-            println!("{}", "Error running cs-fixer".red());
-            error!("Error: in cs:fix when run command {e}");
-            process::exit(CommandStatus::FatalError as i32);
+        finish_process();
+    } else {
+        match run_cs_fix(&php_files, &container, false) {
+            Ok(true) => {
+                if args.stan {
+                    run_stan(&container);
+                }
+                finish_process()
+            },
+            Ok(false) => {
+                eprintln!("Error: cs-fixer failed to clean some files");
+                process::exit(CommandStatus::FatalError as i32);
+            }
+            Err(e) => {
+                println!("{}", "Error running cs-fixer".red());
+                error!("Error: in cs:fix when run command {e}");
+                process::exit(CommandStatus::FatalError as i32);
+            }
         }
     }
 }

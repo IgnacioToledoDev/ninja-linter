@@ -13,10 +13,10 @@ const CONFIG_FILE: &str = ".ninja-linter.json";
 
 impl Config {
     pub fn load() -> Self {
-        if let Ok(content) = fs::read_to_string(CONFIG_FILE) {
-            if let Ok(config) = serde_json::from_str(&content) {
-                return config;
-            }
+        if let Ok(content) = fs::read_to_string(CONFIG_FILE)
+            && let Ok(config) = serde_json::from_str(&content)
+        {
+            return config;
         }
         Config::default()
     }

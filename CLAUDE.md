@@ -13,6 +13,9 @@ Ninja Linter is a Rust CLI tool that automatically runs PHP CS Fixer (and option
 cargo build           # Debug build
 cargo build --release # Optimized release build
 
+# development
+cargo clippy          # Lint
+
 # Test
 cargo test                        # Run all tests
 cargo test <test_name_substring>  # Run a specific test
