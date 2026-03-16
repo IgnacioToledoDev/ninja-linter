@@ -1,8 +1,11 @@
 mod command;
 mod file;
+mod config;
+mod parallel;
 
-use crate::command::{run_cs_fix, CommandStatus};
+use crate::command::{run_cs_fix, run_composer_stan, run_test_command, CommandStatus};
 use crate::file::get_modified_files;
+use crate::config::Config;
 use clap::Parser;
 use shadow_rs::shadow;
 use std::process;
@@ -19,15 +22,29 @@ shadow!(build);
     long_about = None
 )]
 struct Args {
-    // EMPTY
+    #[arg(long, help = "Run composer stan after cs-fixer")]
+    stan: bool,
+
+    #[arg(short, long, help = "Run project tests before cs-fixer")]
+    test: bool,
+
+    #[arg(short = 'p', long, help = "Run all tasks in parallel with live status")]
+    parallel: bool,
 }
 
 fn main() {
-    Args::parse();
+    let args = Args::parse();
 
     if build::BRANCH.is_empty() {
         eprintln!("{}", "Error: No branch found!".red());
         process::exit(CommandStatus::FatalError as i32);
+    }
+
+    let mut config = Config::load();
+    let container = config.get_or_set_container_name();
+
+    if args.test && !args.parallel {
+        run_tests(&mut config);
     }
 
     let php_files = match get_modified_files() {
@@ -44,15 +61,67 @@ fn main() {
         process::exit(CommandStatus::Success as i32);
     }
 
-    match run_cs_fix(&php_files) {
-        Ok(true) => finish_process(),
+    if args.parallel {
+        let test_cmd = if args.test {
+            Some(config.get_or_set_test_command())
+        } else {
+            None
+        };
+        let success = parallel::run_parallel(php_files, container, test_cmd, args.stan);
+        if !success {
+            process::exit(CommandStatus::FatalError as i32);
+        }
+        finish_process();
+    } else {
+        match run_cs_fix(&php_files, &container, false) {
+            Ok(true) => {
+                if args.stan {
+                    run_stan(&container);
+                }
+                finish_process()
+            },
+            Ok(false) => {
+                eprintln!("Error: cs-fixer failed to clean some files");
+                process::exit(CommandStatus::FatalError as i32);
+            }
+            Err(e) => {
+                println!("{}", "Error running cs-fixer".red());
+                error!("Error: in cs:fix when run command {e}");
+                process::exit(CommandStatus::FatalError as i32);
+            }
+        }
+    }
+}
+
+fn run_stan(container: &str) {
+    println!("{}", "Running composer stan...".yellow());
+    match run_composer_stan(container) {
+        Ok(true) => println!("{}", "✅ PHPStan passed".green()),
         Ok(false) => {
-            eprintln!("Error: cs-fixer failed to clean some files");
+            eprintln!("{}", "❌ PHPStan failed".red());
             process::exit(CommandStatus::FatalError as i32);
         }
         Err(e) => {
-            println!("{}", "Error running cs-fixer".red());
-            error!("Error: in cs:fix when run command {e}");
+            println!("{}", "Error running composer stan".red());
+            error!("Error: in composer stan when run command {e}");
+            process::exit(CommandStatus::FatalError as i32);
+        }
+    }
+}
+
+fn run_tests(config: &mut Config) {
+    let command = config.get_or_set_test_command();
+
+    println!("{}", format!("Running tests: {}...", command).yellow());
+    match run_test_command(&command) {
+        Ok(true) => println!("{}", "✅ Tests passed".green()),
+        Ok(false) => {
+            eprintln!("{}", "❌ Tests failed".red());
+            process::exit(CommandStatus::FatalError as i32);
+        }
+        Err(e) => {
+            println!("{}", "Error running tests".red());
+            error!("Error: in tests when run command {e}");
             process::exit(CommandStatus::FatalError as i32);
         }
     }
