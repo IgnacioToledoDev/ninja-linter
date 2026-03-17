@@ -71,9 +71,10 @@ pub fn run_parallel(
 
     if let Some(cmd) = test_command {
         let tx0 = tx.clone();
+        let cont = container.clone();
         thread::spawn(move || {
             tx0.send(TaskUpdate::Started(0)).ok();
-            let result = run_test_command(&cmd).unwrap_or(false);
+            let result = run_test_command(&cmd, &cont).unwrap_or(false);
             tx0.send(TaskUpdate::Finished(0, result)).ok();
         });
     }
