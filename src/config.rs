@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use colored::Colorize;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -9,11 +10,19 @@ pub struct Config {
     pub container_name: Option<String>,
 }
 
-const CONFIG_FILE: &str = ".ninja-linter.json";
+const CONFIG_DIR: &str = "ninja-linter";
+const CONFIG_FILENAME: &str = "config.json";
+
+fn config_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(CONFIG_DIR)
+        .join(CONFIG_FILENAME)
+}
 
 impl Config {
     pub fn load() -> Self {
-        if let Ok(content) = fs::read_to_string(CONFIG_FILE)
+        if let Ok(content) = fs::read_to_string(config_path())
             && let Ok(config) = serde_json::from_str(&content)
         {
             return config;
@@ -22,8 +31,12 @@ impl Config {
     }
 
     pub fn save(&self) -> io::Result<()> {
+        let path = config_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         let content = serde_json::to_string_pretty(self).unwrap();
-        fs::write(CONFIG_FILE, content)
+        fs::write(path, content)
     }
 
     pub fn get_or_set_test_command(&mut self) -> String {
@@ -72,6 +85,20 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_config_path_ends_with_expected_components() {
+        let path = config_path();
+        let mut components = path.components().rev();
+        assert_eq!(components.next().unwrap().as_os_str(), CONFIG_FILENAME);
+        assert_eq!(components.next().unwrap().as_os_str(), CONFIG_DIR);
+    }
+
+    #[test]
+    fn test_config_path_is_absolute() {
+        let path = config_path();
+        assert!(path.is_absolute());
+    }
 
     #[test]
     fn test_config_default_has_no_container_name() {
