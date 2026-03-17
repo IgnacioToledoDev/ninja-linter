@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Write};
+use std::path::PathBuf;
 use colored::Colorize;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -11,9 +12,16 @@ pub struct Config {
 
 const CONFIG_FILE: &str = ".ninja-linter.json";
 
+fn config_path() -> PathBuf {
+    std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|dir| dir.join(CONFIG_FILE)))
+        .unwrap_or_else(|| PathBuf::from(CONFIG_FILE))
+}
+
 impl Config {
     pub fn load() -> Self {
-        if let Ok(content) = fs::read_to_string(CONFIG_FILE)
+        if let Ok(content) = fs::read_to_string(config_path())
             && let Ok(config) = serde_json::from_str(&content)
         {
             return config;
@@ -23,7 +31,7 @@ impl Config {
 
     pub fn save(&self) -> io::Result<()> {
         let content = serde_json::to_string_pretty(self).unwrap();
-        fs::write(CONFIG_FILE, content)
+        fs::write(config_path(), content)
     }
 
     pub fn get_or_set_test_command(&mut self) -> String {
