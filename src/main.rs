@@ -22,7 +22,7 @@ shadow!(build);
     long_about = None
 )]
 struct Args {
-    #[arg(long, help = "Run composer stan after cs-fixer")]
+    #[arg(short, long, help = "Run composer stan after cs-fixer")]
     stan: bool,
 
     #[arg(short, long, help = "Run project tests before cs-fixer")]
