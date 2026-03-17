@@ -10,13 +10,14 @@ pub struct Config {
     pub container_name: Option<String>,
 }
 
-const CONFIG_FILE: &str = ".ninja-linter.json";
+const CONFIG_DIR: &str = "ninja-linter";
+const CONFIG_FILENAME: &str = "config.json";
 
 fn config_path() -> PathBuf {
-    std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|dir| dir.join(CONFIG_FILE)))
-        .unwrap_or_else(|| PathBuf::from(CONFIG_FILE))
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(CONFIG_DIR)
+        .join(CONFIG_FILENAME)
 }
 
 impl Config {
@@ -30,8 +31,12 @@ impl Config {
     }
 
     pub fn save(&self) -> io::Result<()> {
+        let path = config_path();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
         let content = serde_json::to_string_pretty(self).unwrap();
-        fs::write(config_path(), content)
+        fs::write(path, content)
     }
 
     pub fn get_or_set_test_command(&mut self) -> String {
@@ -80,6 +85,20 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_config_path_ends_with_expected_components() {
+        let path = config_path();
+        let mut components = path.components().rev();
+        assert_eq!(components.next().unwrap().as_os_str(), CONFIG_FILENAME);
+        assert_eq!(components.next().unwrap().as_os_str(), CONFIG_DIR);
+    }
+
+    #[test]
+    fn test_config_path_is_absolute() {
+        let path = config_path();
+        assert!(path.is_absolute());
+    }
 
     #[test]
     fn test_config_default_has_no_container_name() {
