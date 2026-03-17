@@ -1,7 +1,8 @@
 mod command;
-mod file;
 mod config;
+mod file;
 mod parallel;
+mod tui;
 
 use crate::command::{run_cs_fix, run_composer_stan, run_test_command, CommandStatus};
 use crate::file::get_modified_files;
