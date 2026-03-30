@@ -23,7 +23,7 @@ shadow!(build);
     long_about = None
 )]
 struct Args {
-    #[arg(long, help = "Run composer stan after cs-fixer")]
+    #[arg(short, long, help = "Run composer stan after cs-fixer")]
     stan: bool,
 
     #[arg(short, long, help = "Run project tests before cs-fixer")]
@@ -45,7 +45,7 @@ fn main() {
     let container = config.get_or_set_container_name();
 
     if args.test && !args.parallel {
-        run_tests(&mut config);
+        run_tests(&mut config, &container);
     }
 
     let php_files = match get_modified_files() {
@@ -110,11 +110,11 @@ fn run_stan(container: &str) {
     }
 }
 
-fn run_tests(config: &mut Config) {
+fn run_tests(config: &mut Config, container: &str) {
     let command = config.get_or_set_test_command();
 
     println!("{}", format!("Running tests: {}...", command).yellow());
-    match run_test_command(&command) {
+    match run_test_command(&command, container) {
         Ok(true) => println!("{}", "✅ Tests passed".green()),
         Ok(false) => {
             eprintln!("{}", "❌ Tests failed".red());

@@ -57,18 +57,14 @@ pub fn run_composer_stan(container: &str) -> io::Result<bool> {
     Ok(status.success())
 }
 
-pub fn run_test_command(command_str: &str) -> io::Result<bool> {
-    let parts: Vec<&str> = command_str.split_whitespace().collect();
-    if parts.is_empty() {
+pub fn run_test_command(command_str: &str, container: &str) -> io::Result<bool> {
+    if command_str.trim().is_empty() {
         return Ok(false);
     }
 
-    let mut cmd = Command::new(parts[0]);
-    if parts.len() > 1 {
-        cmd.args(&parts[1..]);
-    }
-
-    let status = cmd.status()?;
+    let status = Command::new("docker")
+        .args(["exec", container, "sh", "-c", command_str])
+        .status()?;
 
     Ok(status.success())
 }
@@ -135,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_run_test_command_empty() {
-        let result = run_test_command("");
+        let result = run_test_command("", "ninja_symfony");
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
