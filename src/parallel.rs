@@ -1,59 +1,67 @@
-use std::io::{stdout, IsTerminal, Write};
+//! Parallel execution of linting tasks.
+//!
+//! Spawns up to three worker threads (tests, CS Fixer, PHPStan) concurrently
+//! and delegates live status rendering to [`crate::tui`].
+
 use std::sync::mpsc;
 use std::thread;
-use crossterm::{cursor, execute};
-use colored::Colorize;
 
 use crate::command::{run_cs_fix, run_composer_stan, run_test_command};
+use crate::tui;
+
+// ─── Task types (public so `tui` can reference them) ─────────────────────────
 
 #[derive(Clone, PartialEq)]
-enum TaskStatus {
+pub enum TaskStatus {
     Pending,
     Running,
     Done,
     Failed,
 }
 
-struct TaskState {
-    label: String,
-    status: TaskStatus,
+pub struct TaskState {
+    pub label: String,
+    pub status: TaskStatus,
 }
 
-enum TaskUpdate {
+pub enum TaskUpdate {
     Started(usize),
     Finished(usize, bool),
 }
 
-fn render_task_list(tasks: &[TaskState], first_render: bool) {
-    let is_tty = stdout().is_terminal();
-    let active_count = tasks.len();
+// ─── Public entry-point ───────────────────────────────────────────────────────
 
-    if !first_render && is_tty && active_count > 0 {
-        execute!(stdout(), cursor::MoveUp(active_count as u16)).ok();
-    }
-
-    for task in tasks {
-        let line = match task.status {
-            TaskStatus::Pending => format!("⏳ {}", task.label),
-            TaskStatus::Running => format!("🔄 {} ...", task.label.yellow()),
-            TaskStatus::Done => format!("✅ {}", task.label.green()),
-            TaskStatus::Failed => format!("❌ {}", task.label.red()),
-        };
-        println!("{}", line);
-    }
-    stdout().flush().ok();
-}
-
+/// Run CS Fixer, optional tests, and optional PHPStan in parallel threads,
+/// displaying a live ratatui dashboard while they execute.
+///
+/// # Returns
+///
+/// `true` if every enabled task succeeded, `false` otherwise.
 pub fn run_parallel(
     php_files: Vec<String>,
     container: String,
     test_command: Option<String>,
     run_stan: bool,
 ) -> bool {
-    let mut tasks = vec![
+    let tasks = build_initial_tasks(&test_command, run_stan);
+    let (tx, rx) = mpsc::channel::<TaskUpdate>();
+
+    spawn_workers(&php_files, &container, test_command, run_stan, tx);
+
+    tui::run_dashboard(tasks, php_files, rx)
+}
+
+// ─── Private helpers ──────────────────────────────────────────────────────────
+
+fn build_initial_tasks(test_command: &Option<String>, run_stan: bool) -> Vec<TaskState> {
+    vec![
         TaskState {
             label: "Tests".to_string(),
-            status: if test_command.is_none() { TaskStatus::Done } else { TaskStatus::Pending },
+            status: if test_command.is_none() {
+                TaskStatus::Done
+            } else {
+                TaskStatus::Pending
+            },
         },
         TaskState {
             label: "CS Fixer".to_string(),
@@ -61,17 +69,25 @@ pub fn run_parallel(
         },
         TaskState {
             label: "PHPStan".to_string(),
-            status: if !run_stan { TaskStatus::Done } else { TaskStatus::Pending },
+            status: if !run_stan {
+                TaskStatus::Done
+            } else {
+                TaskStatus::Pending
+            },
         },
-    ];
+    ]
+}
 
-    render_task_list(&tasks, true);
-
-    let (tx, rx) = mpsc::channel::<TaskUpdate>();
-
+fn spawn_workers(
+    php_files: &[String],
+    container: &str,
+    test_command: Option<String>,
+    run_stan: bool,
+    tx: mpsc::Sender<TaskUpdate>,
+) {
     if let Some(cmd) = test_command {
         let tx0 = tx.clone();
-        let cont = container.clone();
+        let cont = container.to_string();
         thread::spawn(move || {
             tx0.send(TaskUpdate::Started(0)).ok();
             let result = run_test_command(&cmd, &cont).unwrap_or(false);
@@ -81,54 +97,34 @@ pub fn run_parallel(
 
     {
         let tx1 = tx.clone();
-        let files = php_files.clone();
-        let cont = container.clone();
+        let files = php_files.to_vec();
+        let cont = container.to_string();
         thread::spawn(move || {
             tx1.send(TaskUpdate::Started(1)).ok();
-            let result = run_cs_fix(&files, &cont, true).unwrap_or(false);
-            tx1.send(TaskUpdate::Finished(1, result)).ok();
+            let ok = run_cs_fix(&files, &cont, true).unwrap_or(false);
+            tx1.send(TaskUpdate::Finished(1, ok)).ok();
         });
     }
 
     if run_stan {
         let tx2 = tx.clone();
-        let cont = container.clone();
+        let cont = container.to_string();
         thread::spawn(move || {
             tx2.send(TaskUpdate::Started(2)).ok();
-            let result = run_composer_stan(&cont).unwrap_or(false);
-            tx2.send(TaskUpdate::Finished(2, result)).ok();
+            let ok = run_composer_stan(&cont).unwrap_or(false);
+            tx2.send(TaskUpdate::Finished(2, ok)).ok();
         });
     }
 
+    // Drop the original sender so the channel closes when all workers finish.
     drop(tx);
-
-    for update in rx {
-        match update {
-            TaskUpdate::Started(i) => tasks[i].status = TaskStatus::Running,
-            TaskUpdate::Finished(i, true) => tasks[i].status = TaskStatus::Done,
-            TaskUpdate::Finished(i, false) => tasks[i].status = TaskStatus::Failed,
-        }
-        render_task_list(&tasks, false);
-    }
-
-    tasks.iter().all(|t| t.status != TaskStatus::Failed)
 }
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_render_does_not_panic() {
-        let tasks = vec![
-            TaskState { label: "Pending task".to_string(), status: TaskStatus::Pending },
-            TaskState { label: "Running task".to_string(), status: TaskStatus::Running },
-            TaskState { label: "Done task".to_string(), status: TaskStatus::Done },
-            TaskState { label: "Failed task".to_string(), status: TaskStatus::Failed },
-        ];
-        render_task_list(&tasks, true);
-        render_task_list(&tasks, false);
-    }
 
     #[test]
     fn test_task_status_all_done_returns_true() {
@@ -153,8 +149,20 @@ mod tests {
     }
 
     #[test]
-    fn test_run_parallel_nothing_to_run() {
-        let result = run_parallel(vec![], "ninja_symfony".to_string(), None, false);
-        assert!(result);
+    fn test_build_initial_tasks_all_disabled() {
+        let tasks = build_initial_tasks(&None, false);
+        assert_eq!(tasks.len(), 3);
+        assert!(matches!(tasks[0].status, TaskStatus::Done)); // tests skipped
+        assert!(matches!(tasks[1].status, TaskStatus::Pending)); // cs-fixer always pending
+        assert!(matches!(tasks[2].status, TaskStatus::Done)); // stan skipped
+    }
+
+    #[test]
+    fn test_build_initial_tasks_all_enabled() {
+        let cmd = Some("bin/phpunit".to_string());
+        let tasks = build_initial_tasks(&cmd, true);
+        assert!(matches!(tasks[0].status, TaskStatus::Pending));
+        assert!(matches!(tasks[1].status, TaskStatus::Pending));
+        assert!(matches!(tasks[2].status, TaskStatus::Pending));
     }
 }
