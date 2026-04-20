@@ -96,7 +96,7 @@ fn main() {
 
 fn run_stan(container: &str) {
     println!("{}", "Running composer stan...".yellow());
-    match run_composer_stan(container) {
+    match run_composer_stan(container, false) {
         Ok(true) => println!("{}", "✅ PHPStan passed".green()),
         Ok(false) => {
             eprintln!("{}", "❌ PHPStan failed".red());
@@ -114,7 +114,7 @@ fn run_tests(config: &mut Config, container: &str) {
     let command = config.get_or_set_test_command();
 
     println!("{}", format!("Running tests: {}...", command).yellow());
-    match run_test_command(&command, container) {
+    match run_test_command(&command, container, false) {
         Ok(true) => println!("{}", "✅ Tests passed".green()),
         Ok(false) => {
             eprintln!("{}", "❌ Tests failed".red());
