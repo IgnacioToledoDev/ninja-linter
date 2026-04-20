@@ -1,4 +1,4 @@
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::io;
 
 pub enum CommandStatus {
@@ -27,9 +27,12 @@ pub fn run_cs_fix(files: &[String], container: &str, silent: bool) -> io::Result
     for file in files {
         let args = build_cs_fix_args(file, container, silent);
 
-        let status = Command::new("docker")
-            .args(&args)
-            .status()?;
+        let mut cmd = Command::new("docker");
+        cmd.args(&args);
+        if silent {
+            cmd.stdout(Stdio::null()).stderr(Stdio::null());
+        }
+        let status = cmd.status()?;
 
         if !status.success() {
             return Ok(false);
@@ -42,7 +45,7 @@ pub fn run_cs_fix(files: &[String], container: &str, silent: bool) -> io::Result
     Ok(true)
 }
 
-pub fn run_composer_stan(container: &str) -> io::Result<bool> {
+pub fn run_composer_stan(container: &str, silent: bool) -> io::Result<bool> {
     let args = vec![
         "exec".to_string(),
         container.to_string(),
@@ -50,21 +53,27 @@ pub fn run_composer_stan(container: &str) -> io::Result<bool> {
         "stan".to_string(),
     ];
 
-    let status = Command::new("docker")
-        .args(&args)
-        .status()?;
+    let mut cmd = Command::new("docker");
+    cmd.args(&args);
+    if silent {
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    let status = cmd.status()?;
 
     Ok(status.success())
 }
 
-pub fn run_test_command(command_str: &str, container: &str) -> io::Result<bool> {
+pub fn run_test_command(command_str: &str, container: &str, silent: bool) -> io::Result<bool> {
     if command_str.trim().is_empty() {
         return Ok(false);
     }
 
-    let status = Command::new("docker")
-        .args(["exec", container, "sh", "-c", command_str])
-        .status()?;
+    let mut cmd = Command::new("docker");
+    cmd.args(["exec", container, "sh", "-c", command_str]);
+    if silent {
+        cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    }
+    let status = cmd.status()?;
 
     Ok(status.success())
 }
@@ -144,7 +153,7 @@ mod tests {
 
     #[test]
     fn test_run_test_command_empty() {
-        let result = run_test_command("", "ninja_symfony");
+        let result = run_test_command("", "ninja_symfony", false);
         assert!(result.is_ok());
         assert!(!result.unwrap());
     }
