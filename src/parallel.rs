@@ -90,7 +90,7 @@ fn spawn_workers(
         let cont = container.to_string();
         thread::spawn(move || {
             tx0.send(TaskUpdate::Started(0)).ok();
-            let result = run_test_command(&cmd, &cont).unwrap_or(false);
+            let result = run_test_command(&cmd, &cont, true).unwrap_or(false);
             tx0.send(TaskUpdate::Finished(0, result)).ok();
         });
     }
@@ -111,7 +111,7 @@ fn spawn_workers(
         let cont = container.to_string();
         thread::spawn(move || {
             tx2.send(TaskUpdate::Started(2)).ok();
-            let ok = run_composer_stan(&cont).unwrap_or(false);
+            let ok = run_composer_stan(&cont, true).unwrap_or(false);
             tx2.send(TaskUpdate::Finished(2, ok)).ok();
         });
     }
