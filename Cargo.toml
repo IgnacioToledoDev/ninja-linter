@@ -17,7 +17,11 @@ dirs = "6.0"
 reqwest = { version = "0.13.4", features = ["json", "blocking"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 anyhow = "1.0.103"
+self-replace = "1"
 
+
+[dev-dependencies]
+mockito = "1"
 
 [build-dependencies]
 shadow-rs = "1.5.0"
