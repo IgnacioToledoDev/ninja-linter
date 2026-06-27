@@ -283,23 +283,22 @@ fn run_loop(
 
         terminal.draw(|f| draw(f, app))?;
 
-        if event::poll(TICK_RATE)? {
-            if let Event::Key(key) = event::read()? {
-                if key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => return Ok(!app.has_failure()),
-                        KeyCode::Up if app.complete && app.selected > 0 => {
-                            app.selected -= 1;
-                        }
-                        KeyCode::Down
-                            if app.complete
-                                && app.selected < app.tasks.len().saturating_sub(1) =>
-                        {
-                            app.selected += 1;
-                        }
-                        _ => {}
-                    }
+        if event::poll(TICK_RATE)?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => return Ok(!app.has_failure()),
+                KeyCode::Up if app.complete && app.selected > 0 => {
+                    app.selected -= 1;
                 }
+                KeyCode::Down
+                    if app.complete
+                        && app.selected < app.tasks.len().saturating_sub(1) =>
+                {
+                    app.selected += 1;
+                }
+                _ => {}
             }
         }
     }
