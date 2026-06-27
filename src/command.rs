@@ -91,6 +91,75 @@ fn build_cs_fix_args(file: &str, container: &str, silent: bool) -> Vec<String> {
     ]
 }
 
+fn strip_ansi(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for nc in chars.by_ref() {
+                    if nc.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            } else {
+                chars.next();
+            }
+        } else if c != '\r' {
+            result.push(c);
+        }
+    }
+    result
+}
+
+pub fn run_cs_fix_capture(files: &[String], container: &str) -> io::Result<(bool, String)> {
+    if files.is_empty() {
+        return Ok((true, String::new()));
+    }
+    let mut combined = String::new();
+    let mut all_ok = true;
+    for file in files {
+        let args = [
+            "exec", container, "composer", "cs:fix", file.as_str(),
+        ];
+        let out = Command::new("docker").args(args).output()?;
+        combined.push_str(&strip_ansi(&String::from_utf8_lossy(&out.stdout)));
+        combined.push_str(&strip_ansi(&String::from_utf8_lossy(&out.stderr)));
+        if !out.status.success() {
+            all_ok = false;
+        }
+    }
+    Ok((all_ok, combined))
+}
+
+pub fn run_composer_stan_capture(container: &str) -> io::Result<(bool, String)> {
+    let out = Command::new("docker")
+        .args(["exec", container, "composer", "stan"])
+        .output()?;
+    let combined = format!(
+        "{}{}",
+        strip_ansi(&String::from_utf8_lossy(&out.stdout)),
+        strip_ansi(&String::from_utf8_lossy(&out.stderr))
+    );
+    Ok((out.status.success(), combined))
+}
+
+pub fn run_test_command_capture(command_str: &str, container: &str) -> io::Result<(bool, String)> {
+    if command_str.trim().is_empty() {
+        return Ok((false, String::new()));
+    }
+    let out = Command::new("docker")
+        .args(["exec", container, "sh", "-c", command_str])
+        .output()?;
+    let combined = format!(
+        "{}{}",
+        strip_ansi(&String::from_utf8_lossy(&out.stdout)),
+        strip_ansi(&String::from_utf8_lossy(&out.stderr))
+    );
+    Ok((out.status.success(), combined))
+}
+
 pub fn run_diff_tree_command() -> io::Result<String> {
     let output = Command::new("git")
         .args(["diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD"])
