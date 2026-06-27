@@ -6,7 +6,7 @@
 use std::sync::mpsc;
 use std::thread;
 
-use crate::command::{run_cs_fix, run_composer_stan, run_test_command};
+use crate::command::{run_cs_fix_capture, run_composer_stan_capture, run_test_command_capture};
 use crate::tui;
 
 // ─── Task types (public so `tui` can reference them) ─────────────────────────
@@ -22,11 +22,12 @@ pub enum TaskStatus {
 pub struct TaskState {
     pub label: String,
     pub status: TaskStatus,
+    pub output: String,
 }
 
 pub enum TaskUpdate {
     Started(usize),
-    Finished(usize, bool),
+    Finished(usize, bool, String),
 }
 
 // ─── Public entry-point ───────────────────────────────────────────────────────
@@ -57,23 +58,18 @@ fn build_initial_tasks(test_command: &Option<String>, run_stan: bool) -> Vec<Tas
     vec![
         TaskState {
             label: "Tests".to_string(),
-            status: if test_command.is_none() {
-                TaskStatus::Done
-            } else {
-                TaskStatus::Pending
-            },
+            status: if test_command.is_none() { TaskStatus::Done } else { TaskStatus::Pending },
+            output: String::new(),
         },
         TaskState {
             label: "CS Fixer".to_string(),
             status: TaskStatus::Pending,
+            output: String::new(),
         },
         TaskState {
             label: "PHPStan".to_string(),
-            status: if !run_stan {
-                TaskStatus::Done
-            } else {
-                TaskStatus::Pending
-            },
+            status: if !run_stan { TaskStatus::Done } else { TaskStatus::Pending },
+            output: String::new(),
         },
     ]
 }
@@ -90,8 +86,8 @@ fn spawn_workers(
         let cont = container.to_string();
         thread::spawn(move || {
             tx0.send(TaskUpdate::Started(0)).ok();
-            let result = run_test_command(&cmd, &cont, true).unwrap_or(false);
-            tx0.send(TaskUpdate::Finished(0, result)).ok();
+            let (ok, out) = run_test_command_capture(&cmd, &cont).unwrap_or((false, String::new()));
+            tx0.send(TaskUpdate::Finished(0, ok, out)).ok();
         });
     }
 
@@ -101,8 +97,8 @@ fn spawn_workers(
         let cont = container.to_string();
         thread::spawn(move || {
             tx1.send(TaskUpdate::Started(1)).ok();
-            let ok = run_cs_fix(&files, &cont, true).unwrap_or(false);
-            tx1.send(TaskUpdate::Finished(1, ok)).ok();
+            let (ok, out) = run_cs_fix_capture(&files, &cont).unwrap_or((false, String::new()));
+            tx1.send(TaskUpdate::Finished(1, ok, out)).ok();
         });
     }
 
@@ -111,8 +107,8 @@ fn spawn_workers(
         let cont = container.to_string();
         thread::spawn(move || {
             tx2.send(TaskUpdate::Started(2)).ok();
-            let ok = run_composer_stan(&cont, true).unwrap_or(false);
-            tx2.send(TaskUpdate::Finished(2, ok)).ok();
+            let (ok, out) = run_composer_stan_capture(&cont).unwrap_or((false, String::new()));
+            tx2.send(TaskUpdate::Finished(2, ok, out)).ok();
         });
     }
 
@@ -126,12 +122,16 @@ fn spawn_workers(
 mod tests {
     use super::*;
 
+    fn make_task(label: &str, status: TaskStatus) -> TaskState {
+        TaskState { label: label.to_string(), status, output: String::new() }
+    }
+
     #[test]
     fn test_task_status_all_done_returns_true() {
         let tasks = vec![
-            TaskState { label: "Tests".to_string(), status: TaskStatus::Done },
-            TaskState { label: "CS Fixer".to_string(), status: TaskStatus::Done },
-            TaskState { label: "PHPStan".to_string(), status: TaskStatus::Done },
+            make_task("Tests", TaskStatus::Done),
+            make_task("CS Fixer", TaskStatus::Done),
+            make_task("PHPStan", TaskStatus::Done),
         ];
         let result = tasks.iter().all(|t| t.status != TaskStatus::Failed);
         assert!(result);
@@ -140,9 +140,9 @@ mod tests {
     #[test]
     fn test_task_status_one_failed_returns_false() {
         let tasks = vec![
-            TaskState { label: "Tests".to_string(), status: TaskStatus::Done },
-            TaskState { label: "CS Fixer".to_string(), status: TaskStatus::Failed },
-            TaskState { label: "PHPStan".to_string(), status: TaskStatus::Done },
+            make_task("Tests", TaskStatus::Done),
+            make_task("CS Fixer", TaskStatus::Failed),
+            make_task("PHPStan", TaskStatus::Done),
         ];
         let result = tasks.iter().all(|t| t.status != TaskStatus::Failed);
         assert!(!result);

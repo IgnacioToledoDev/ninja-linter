@@ -30,15 +30,15 @@ use std::time::Duration;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
 use ratatui::{
+    Frame, Terminal,
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, Paragraph},
-    Frame, Terminal,
 };
 
 use crate::parallel::{TaskState, TaskStatus, TaskUpdate};
@@ -53,19 +53,25 @@ type CrosstermTerminal = Terminal<CrosstermBackend<Stdout>>;
 struct App {
     tasks: Vec<TaskState>,
     php_files: Vec<String>,
+    /// Index of the currently highlighted task (active when `complete`).
+    selected: usize,
+    /// Set to `true` the first time every task reaches a terminal state.
+    complete: bool,
 }
 
 impl App {
     fn new(tasks: Vec<TaskState>, php_files: Vec<String>) -> Self {
-        Self { tasks, php_files }
+        Self { tasks, php_files, selected: 0, complete: false }
     }
 
     /// Apply a single update message sent by a worker thread.
     fn apply(&mut self, update: TaskUpdate) {
         match update {
             TaskUpdate::Started(i) => self.tasks[i].status = TaskStatus::Running,
-            TaskUpdate::Finished(i, true) => self.tasks[i].status = TaskStatus::Done,
-            TaskUpdate::Finished(i, false) => self.tasks[i].status = TaskStatus::Failed,
+            TaskUpdate::Finished(i, ok, output) => {
+                self.tasks[i].status = if ok { TaskStatus::Done } else { TaskStatus::Failed };
+                self.tasks[i].output = output;
+            }
         }
     }
 
@@ -105,7 +111,7 @@ fn draw(frame: &mut Frame, app: &App) {
     let inner = outer.inner(area);
     frame.render_widget(outer, area);
 
-    let task_height = (app.tasks.len() as u16).saturating_add(2); // list rows + 2 border lines
+    let task_height = (app.tasks.len() as u16).saturating_add(2);
 
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -117,18 +123,26 @@ fn draw(frame: &mut Frame, app: &App) {
         .split(inner);
 
     render_tasks(frame, app, chunks[0]);
-    render_files(frame, app, chunks[1]);
-    render_hint(frame, chunks[2]);
+
+    if app.complete {
+        render_output(frame, app, chunks[1]);
+    } else {
+        render_files(frame, app, chunks[1]);
+    }
+
+    render_hint(frame, app, chunks[2]);
 }
 
 fn render_tasks(frame: &mut Frame, app: &App, area: Rect) {
     let items: Vec<ListItem> = app
         .tasks
         .iter()
-        .map(|task| {
+        .enumerate()
+        .map(|(i, task)| {
             let (icon, style) = task_style(&task.status);
+            let cursor = if app.complete && i == app.selected { "▶ " } else { "  " };
             ListItem::new(Line::from(vec![
-                Span::raw(format!("  {icon} ")),
+                Span::raw(format!("  {cursor}{icon} ")),
                 Span::styled(task.label.clone(), style),
             ]))
         })
@@ -162,9 +176,50 @@ fn render_files(frame: &mut Frame, app: &App, area: Rect) {
     frame.render_widget(List::new(items).block(block), area);
 }
 
-fn render_hint(frame: &mut Frame, area: Rect) {
-    let hint = Paragraph::new("  Press q or Esc to exit early")
-        .style(Style::default().fg(Color::DarkGray));
+fn render_output(frame: &mut Frame, app: &App, area: Rect) {
+    if app.tasks.is_empty() {
+        return;
+    }
+    let task = &app.tasks[app.selected];
+    let title = format!(" {} ", task.label);
+
+    let content = if task.output.trim().is_empty() {
+        "No output captured.".to_string()
+    } else {
+        let available = area.height.saturating_sub(2) as usize;
+        let lines: Vec<&str> = task.output.lines().collect();
+        if lines.len() > available {
+            lines[lines.len() - available..].join("\n")
+        } else {
+            task.output.trim_end().to_string()
+        }
+    };
+
+    let border_color = match task.status {
+        TaskStatus::Failed => Color::Red,
+        TaskStatus::Done => Color::Green,
+        _ => Color::Blue,
+    };
+
+    let block = Block::default()
+        .title(title)
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(border_color));
+
+    frame.render_widget(Paragraph::new(content).block(block), area);
+}
+
+fn render_hint(frame: &mut Frame, app: &App, area: Rect) {
+    let text = if app.complete {
+        if app.has_failure() {
+            "  ❌ Some tasks failed · ↑↓ select · q exit"
+        } else {
+            "  ✅ All tasks passed · ↑↓ select · q exit"
+        }
+    } else {
+        "  Press q or Esc to exit early"
+    };
+    let hint = Paragraph::new(text).style(Style::default().fg(Color::DarkGray));
     frame.render_widget(hint, area);
 }
 
@@ -181,9 +236,7 @@ fn task_style(status: &TaskStatus) -> (&'static str, Style) {
         TaskStatus::Done => ("✅", Style::default().fg(Color::Green)),
         TaskStatus::Failed => (
             "❌",
-            Style::default()
-                .fg(Color::Red)
-                .add_modifier(Modifier::BOLD),
+            Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
         ),
     }
 }
@@ -214,28 +267,39 @@ fn run_loop(
     rx: &mpsc::Receiver<TaskUpdate>,
 ) -> io::Result<bool> {
     loop {
-        // Drain every pending update without blocking.
         while let Ok(update) = rx.try_recv() {
             app.apply(update);
         }
 
-        terminal.draw(|f| draw(f, app))?;
-
-        // All tasks have reached a terminal state — render a final frame,
-        // pause briefly so the user can read the result, then exit.
-        if app.is_complete() {
-            terminal.draw(|f| draw(f, app))?;
-            std::thread::sleep(Duration::from_millis(600));
-            return Ok(!app.has_failure());
+        // First time all tasks finish: lock in complete state and default selection.
+        if !app.complete && app.is_complete() {
+            app.complete = true;
+            app.selected = app
+                .tasks
+                .iter()
+                .position(|t| t.status == TaskStatus::Failed)
+                .unwrap_or(0);
         }
 
-        // Non-blocking keyboard check (reuses TICK_RATE as the poll timeout).
+        terminal.draw(|f| draw(f, app))?;
+
         if event::poll(TICK_RATE)?
             && let Event::Key(key) = event::read()?
             && key.kind == KeyEventKind::Press
-            && matches!(key.code, KeyCode::Char('q') | KeyCode::Esc)
         {
-            return Ok(!app.has_failure());
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => return Ok(!app.has_failure()),
+                KeyCode::Up if app.complete && app.selected > 0 => {
+                    app.selected -= 1;
+                }
+                KeyCode::Down
+                    if app.complete
+                        && app.selected < app.tasks.len().saturating_sub(1) =>
+                {
+                    app.selected += 1;
+                }
+                _ => {}
+            }
         }
     }
 }
@@ -291,6 +355,7 @@ mod tests {
             .map(|s| TaskState {
                 label: "task".to_string(),
                 status: s.clone(),
+                output: String::new(),
             })
             .collect();
         App::new(tasks, vec!["src/Foo.php".to_string()])
@@ -342,14 +407,14 @@ mod tests {
     #[test]
     fn test_apply_finished_success() {
         let mut app = make_app(&[TaskStatus::Running]);
-        app.apply(TaskUpdate::Finished(0, true));
+        app.apply(TaskUpdate::Finished(0, true, String::new()));
         assert!(matches!(app.tasks[0].status, TaskStatus::Done));
     }
 
     #[test]
     fn test_apply_finished_failure() {
         let mut app = make_app(&[TaskStatus::Running]);
-        app.apply(TaskUpdate::Finished(0, false));
+        app.apply(TaskUpdate::Finished(0, false, String::new()));
         assert!(matches!(app.tasks[0].status, TaskStatus::Failed));
     }
 
