@@ -30,8 +30,28 @@ pub async fn show_display_msg() {
         return;
     }
 
-    if current_version > latest_version.tag_name {
+    if is_newer(&latest_version.tag_name, &current_version) {
         start_updater(&latest_version);
+    }
+}
+
+fn parse_semver(v: &str) -> Option<(u64, u64, u64)> {
+    let s = v.trim_start_matches('v');
+    let parts: Vec<&str> = s.split('.').collect();
+    if parts.len() != 3 {
+        return None;
+    }
+    Some((
+        parts[0].parse().ok()?,
+        parts[1].parse().ok()?,
+        parts[2].parse().ok()?,
+    ))
+}
+
+fn is_newer(candidate: &str, baseline: &str) -> bool {
+    match (parse_semver(candidate), parse_semver(baseline)) {
+        (Some(c), Some(b)) => c > b,
+        _ => candidate > baseline,
     }
 }
 fn fetch_release(url: &str) -> Result<RepoRelease> {
@@ -181,6 +201,52 @@ fn start_updater(latest: &RepoRelease) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- parse_semver ---
+
+    #[test]
+    fn test_parse_semver_with_v_prefix() {
+        assert_eq!(parse_semver("v0.8.0"), Some((0, 8, 0)));
+    }
+
+    #[test]
+    fn test_parse_semver_without_prefix() {
+        assert_eq!(parse_semver("1.10.3"), Some((1, 10, 3)));
+    }
+
+    #[test]
+    fn test_parse_semver_invalid() {
+        assert_eq!(parse_semver("ERROR"), None);
+        assert_eq!(parse_semver("v1.2"), None);
+    }
+
+    // --- is_newer ---
+
+    #[test]
+    fn test_is_newer_detects_update() {
+        assert!(is_newer("v0.9.0", "v0.8.0"));
+    }
+
+    #[test]
+    fn test_is_newer_same_version() {
+        assert!(!is_newer("v0.8.0", "v0.8.0"));
+    }
+
+    #[test]
+    fn test_is_newer_older_does_not_trigger() {
+        assert!(!is_newer("v0.7.0", "v0.8.0"));
+    }
+
+    #[test]
+    fn test_is_newer_double_digit_minor() {
+        // string comparison would fail here: "v0.10.0" < "v0.9.0" lexicographically
+        assert!(is_newer("v0.10.0", "v0.9.0"));
+    }
+
+    #[test]
+    fn test_is_newer_major_bump() {
+        assert!(is_newer("v1.0.0", "v0.99.99"));
+    }
 
     // --- platform_identifier ---
 

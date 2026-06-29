@@ -212,9 +212,9 @@ fn render_output(frame: &mut Frame, app: &App, area: Rect) {
 fn render_hint(frame: &mut Frame, app: &App, area: Rect) {
     let text = if app.complete {
         if app.has_failure() {
-            "  ❌ Some tasks failed · ↑↓ select · q exit"
+            "  ❌ Some tasks failed · ↑↓ select · Enter full output · q exit"
         } else {
-            "  ✅ All tasks passed · ↑↓ select · q exit"
+            "  ✅ All tasks passed · ↑↓ select · Enter full output · q exit"
         }
     } else {
         "  Press q or Esc to exit early"
@@ -261,11 +261,14 @@ fn restore_terminal(terminal: &mut CrosstermTerminal) -> io::Result<()> {
 const TICK_RATE: Duration = Duration::from_millis(100);
 
 /// Drive the ratatui event loop until all tasks are done or the user exits.
+///
+/// Returns `(success, dump)` where `dump` is `Some(output)` when the user
+/// pressed Enter to view a task's full output outside the TUI.
 fn run_loop(
     terminal: &mut CrosstermTerminal,
     app: &mut App,
     rx: &mpsc::Receiver<TaskUpdate>,
-) -> io::Result<bool> {
+) -> io::Result<(bool, Option<String>)> {
     loop {
         while let Ok(update) = rx.try_recv() {
             app.apply(update);
@@ -288,7 +291,13 @@ fn run_loop(
             && key.kind == KeyEventKind::Press
         {
             match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => return Ok(!app.has_failure()),
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    return Ok((!app.has_failure(), None));
+                }
+                KeyCode::Enter if app.complete => {
+                    let output = app.tasks[app.selected].output.clone();
+                    return Ok((!app.has_failure(), Some(output)));
+                }
                 KeyCode::Up if app.complete && app.selected > 0 => {
                     app.selected -= 1;
                 }
@@ -339,7 +348,21 @@ pub fn run_dashboard(
         eprintln!("Failed to restore terminal: {e}");
     }
 
-    result.unwrap_or(false)
+    match result {
+        Ok((success, Some(output))) => {
+            let label = &app.tasks[app.selected].label;
+            println!("\n─── {} output ───\n", label);
+            if output.trim().is_empty() {
+                println!("(no output captured)");
+            } else {
+                println!("{}", output.trim_end());
+            }
+            println!();
+            success
+        }
+        Ok((success, None)) => success,
+        Err(_) => false,
+    }
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
