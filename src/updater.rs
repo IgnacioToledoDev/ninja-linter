@@ -14,7 +14,7 @@ struct RepoRelease {
 #[derive(Deserialize, Debug)]
 struct Asset {
     name: String,
-    download_url: String,
+    browser_download_url: String,
 }
 
 // ----------- CHECK VERSION -------------------
@@ -74,7 +74,8 @@ async fn fetch_release(url: &str) -> Result<RepoRelease> {
 }
 
 async fn check_repo() -> Result<RepoRelease> {
-    fetch_release("https://api.github.com/repos/IgnacioToledoDev/ninja-linter/releases/latest").await
+    fetch_release("https://api.github.com/repos/IgnacioToledoDev/ninja-linter/releases/latest")
+        .await
 }
 
 async fn latest_version() -> RepoRelease {
@@ -112,7 +113,7 @@ fn find_asset_url(release: &RepoRelease) -> Result<String> {
         .assets
         .iter()
         .find(|a| a.name.contains(platform))
-        .map(|a| a.download_url.clone())
+        .map(|a| a.browser_download_url.clone())
         .with_context(|| format!("no se encontró un asset para la plataforma '{}'", platform))
 }
 
@@ -160,7 +161,9 @@ async fn start_updater(latest: &RepoRelease) {
 
     let user_res = tokio::task::block_in_place(|| {
         let mut buf = String::new();
-        io::stdin().read_line(&mut buf).expect("Failed to read line");
+        io::stdin()
+            .read_line(&mut buf)
+            .expect("Failed to read line");
         buf
     });
 
@@ -277,7 +280,7 @@ mod tests {
             tag_name: String::from("v1.0.0"),
             assets: vec![Asset {
                 name: format!("ninja-linter-{}.tar.gz", platform),
-                download_url: String::from("https://example.com/asset"),
+                browser_download_url: String::from("https://example.com/asset"),
             }],
         };
         let url = find_asset_url(&release).unwrap();
@@ -290,7 +293,7 @@ mod tests {
             tag_name: String::from("v1.0.0"),
             assets: vec![Asset {
                 name: String::from("ninja-linter-unknown-platform.tar.gz"),
-                download_url: String::from("https://example.com/asset"),
+                browser_download_url: String::from("https://example.com/asset"),
             }],
         };
         assert!(find_asset_url(&release).is_err());
@@ -313,11 +316,11 @@ mod tests {
             assets: vec![
                 Asset {
                     name: String::from("ninja-linter-other-platform.tar.gz"),
-                    download_url: String::from("https://example.com/wrong"),
+                    browser_download_url: String::from("https://example.com/wrong"),
                 },
                 Asset {
                     name: format!("ninja-linter-{}.tar.gz", platform),
-                    download_url: String::from("https://example.com/correct"),
+                    browser_download_url: String::from("https://example.com/correct"),
                 },
             ],
         };
@@ -334,7 +337,7 @@ mod tests {
             "assets": [
                 {
                     "name": "ninja-linter-linux-amd64",
-                    "download_url": "https://github.com/example/releases/download/v1.2.3/ninja-linter-linux-amd64"
+                    "browser_download_url": "https://github.com/example/releases/download/v1.2.3/ninja-linter-linux-amd64"
                 }
             ]
         }"#;
@@ -343,7 +346,7 @@ mod tests {
         assert_eq!(release.assets.len(), 1);
         assert_eq!(release.assets[0].name, "ninja-linter-linux-amd64");
         assert_eq!(
-            release.assets[0].download_url,
+            release.assets[0].browser_download_url,
             "https://github.com/example/releases/download/v1.2.3/ninja-linter-linux-amd64"
         );
     }
@@ -380,7 +383,7 @@ mod tests {
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body(
-                r#"{"tag_name":"v2.0.0","assets":[{"name":"ninja-linter-linux-amd64","download_url":"https://example.com/bin"}]}"#,
+                r#"{"tag_name":"v2.0.0","assets":[{"name":"ninja-linter-linux-amd64","browser_download_url":"https://example.com/bin"}]}"#,
             )
             .create_async()
             .await;
