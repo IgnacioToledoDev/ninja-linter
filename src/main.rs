@@ -3,15 +3,16 @@ mod config;
 mod file;
 mod parallel;
 mod tui;
+mod updater;
 
-use crate::command::{run_cs_fix, run_composer_stan, run_test_command, CommandStatus};
-use crate::file::get_modified_files;
+use crate::command::{CommandStatus, run_composer_stan, run_cs_fix, run_test_command};
 use crate::config::Config;
+use crate::file::get_modified_files;
 use clap::Parser;
+use colored::Colorize;
+use log::error;
 use shadow_rs::shadow;
 use std::process;
-use colored::Colorize;
-use log::{error};
 
 shadow!(build);
 
@@ -33,7 +34,9 @@ struct Args {
     parallel: bool,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
+    updater::show_display_msg().await;
     let args = Args::parse();
 
     if build::BRANCH.is_empty() {
@@ -80,7 +83,7 @@ fn main() {
                     run_stan(&container);
                 }
                 finish_process()
-            },
+            }
             Ok(false) => {
                 eprintln!("Error: cs-fixer failed to clean some files");
                 process::exit(CommandStatus::FatalError as i32);
