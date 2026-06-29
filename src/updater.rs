@@ -31,7 +31,7 @@ pub async fn show_display_msg() {
     }
 
     if is_newer(&latest_version.tag_name, &current_version) {
-        start_updater(&latest_version);
+        start_updater(&latest_version).await;
     }
 }
 
@@ -54,12 +54,13 @@ fn is_newer(candidate: &str, baseline: &str) -> bool {
         _ => candidate > baseline,
     }
 }
-fn fetch_release(url: &str) -> Result<RepoRelease> {
-    let client = reqwest::blocking::Client::new();
+async fn fetch_release(url: &str) -> Result<RepoRelease> {
+    let client = reqwest::Client::new();
     let response = client
         .get(url)
         .header("User-Agent", "ninja-linter")
         .send()
+        .await
         .context("fallo al contactar la API de GitHub")?;
 
     if !response.status().is_success() {
@@ -68,11 +69,12 @@ fn fetch_release(url: &str) -> Result<RepoRelease> {
 
     response
         .json::<RepoRelease>()
+        .await
         .context("fallo al parsear el JSON de la release")
 }
 
 async fn check_repo() -> Result<RepoRelease> {
-    fetch_release("https://api.github.com/repos/IgnacioToledoDev/ninja-linter/releases/latest")
+    fetch_release("https://api.github.com/repos/IgnacioToledoDev/ninja-linter/releases/latest").await
 }
 
 async fn latest_version() -> RepoRelease {
@@ -114,21 +116,22 @@ fn find_asset_url(release: &RepoRelease) -> Result<String> {
         .with_context(|| format!("no se encontró un asset para la plataforma '{}'", platform))
 }
 
-fn download_to_temp(url: &str) -> Result<std::path::PathBuf> {
-    let client = reqwest::blocking::Client::new();
+async fn download_to_temp(url: &str) -> Result<std::path::PathBuf> {
+    let client = reqwest::Client::new();
     let resp = client
         .get(url)
         .header("User-Agent", "ninja-linter")
         .send()
+        .await
         .context("fallo al descargar el asset")?;
 
-    // TODO: Better handler errors this
     if !resp.status().is_success() {
         bail!("descarga falló con status {}", resp.status());
     }
 
     let bytes = resp
         .bytes()
+        .await
         .context("fallo al leer el cuerpo de la descarga")?;
 
     let tmp_path = std::env::temp_dir().join(format!("{}-update", "ninja-linter"));
@@ -148,22 +151,20 @@ fn download_to_temp(url: &str) -> Result<std::path::PathBuf> {
 }
 
 // TODO: refactor this
-fn start_updater(latest: &RepoRelease) {
+async fn start_updater(latest: &RepoRelease) {
     println!(
         "New version available: {} → {}. can you update (y/o)",
         env!("CARGO_PKG_VERSION"),
         latest.tag_name
     );
 
-    let mut user_res = String::new();
+    let user_res = tokio::task::block_in_place(|| {
+        let mut buf = String::new();
+        io::stdin().read_line(&mut buf).expect("Failed to read line");
+        buf
+    });
 
-    io::stdin()
-        .read_line(&mut user_res)
-        .expect("Failed to read line");
-
-    let expected_res = String::from("y");
-
-    if user_res.trim().to_lowercase() != expected_res {
+    if user_res.trim().to_lowercase() != "y" {
         return;
     }
 
@@ -175,7 +176,7 @@ fn start_updater(latest: &RepoRelease) {
         }
     };
 
-    let path = match download_to_temp(&asset_url) {
+    let path = match download_to_temp(&asset_url).await {
         Ok(p) => p,
         Err(e) => {
             println!("Cannot download update: {}", e);
@@ -371,9 +372,9 @@ mod tests {
 
     // --- fetch_release (HTTP mock) ---
 
-    #[test]
-    fn test_fetch_release_success() {
-        let mut server = mockito::Server::new();
+    #[tokio::test]
+    async fn test_fetch_release_success() {
+        let mut server = mockito::Server::new_async().await;
         let _mock = server
             .mock("GET", "/releases/latest")
             .with_status(200)
@@ -381,76 +382,85 @@ mod tests {
             .with_body(
                 r#"{"tag_name":"v2.0.0","assets":[{"name":"ninja-linter-linux-amd64","download_url":"https://example.com/bin"}]}"#,
             )
-            .create();
+            .create_async()
+            .await;
 
         let url = format!("{}/releases/latest", server.url());
-        let release = fetch_release(&url).unwrap();
+        let release = fetch_release(&url).await.unwrap();
         assert_eq!(release.tag_name, "v2.0.0");
         assert_eq!(release.assets.len(), 1);
         assert_eq!(release.assets[0].name, "ninja-linter-linux-amd64");
     }
 
-    #[test]
-    fn test_fetch_release_http_error_returns_err() {
-        let mut server = mockito::Server::new();
+    #[tokio::test]
+    async fn test_fetch_release_http_error_returns_err() {
+        let mut server = mockito::Server::new_async().await;
         let _mock = server
             .mock("GET", "/releases/latest")
             .with_status(404)
-            .create();
+            .create_async()
+            .await;
 
         let url = format!("{}/releases/latest", server.url());
-        assert!(fetch_release(&url).is_err());
+        assert!(fetch_release(&url).await.is_err());
     }
 
-    #[test]
-    fn test_fetch_release_server_error_returns_err() {
-        let mut server = mockito::Server::new();
+    #[tokio::test]
+    async fn test_fetch_release_server_error_returns_err() {
+        let mut server = mockito::Server::new_async().await;
         let _mock = server
             .mock("GET", "/releases/latest")
             .with_status(500)
-            .create();
+            .create_async()
+            .await;
 
         let url = format!("{}/releases/latest", server.url());
-        assert!(fetch_release(&url).is_err());
+        assert!(fetch_release(&url).await.is_err());
     }
 
-    #[test]
-    fn test_fetch_release_invalid_json_returns_err() {
-        let mut server = mockito::Server::new();
+    #[tokio::test]
+    async fn test_fetch_release_invalid_json_returns_err() {
+        let mut server = mockito::Server::new_async().await;
         let _mock = server
             .mock("GET", "/releases/latest")
             .with_status(200)
             .with_header("content-type", "application/json")
             .with_body("not json at all")
-            .create();
+            .create_async()
+            .await;
 
         let url = format!("{}/releases/latest", server.url());
-        assert!(fetch_release(&url).is_err());
+        assert!(fetch_release(&url).await.is_err());
     }
 
     // --- download_to_temp (HTTP mock) ---
 
-    #[test]
-    fn test_download_to_temp_success() {
-        let mut server = mockito::Server::new();
+    #[tokio::test]
+    async fn test_download_to_temp_success() {
+        let mut server = mockito::Server::new_async().await;
         let _mock = server
             .mock("GET", "/asset")
             .with_status(200)
             .with_body(b"fake-binary-content".as_ref())
-            .create();
+            .create_async()
+            .await;
 
         let url = format!("{}/asset", server.url());
-        let path = download_to_temp(&url).unwrap();
+        let path = download_to_temp(&url).await.unwrap();
         assert!(path.exists());
         let _ = std::fs::remove_file(&path);
     }
 
-    #[test]
-    fn test_download_to_temp_http_error_returns_err() {
-        let mut server = mockito::Server::new();
-        let _mock = server.mock("GET", "/asset").with_status(403).create();
+    #[tokio::test]
+    async fn test_download_to_temp_http_error_returns_err() {
+        let mut server = mockito::Server::new_async().await;
+        let _mock = server
+            .mock("GET", "/asset")
+            .with_status(403)
+            .create_async()
+            .await;
 
         let url = format!("{}/asset", server.url());
-        assert!(download_to_temp(&url).is_err());
+        assert!(download_to_temp(&url).await.is_err());
     }
 }
