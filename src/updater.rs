@@ -30,7 +30,7 @@ pub async fn show_display_msg() {
         return;
     }
 
-    if current_version == latest_version.tag_name {
+    if current_version > latest_version.tag_name {
         start_updater(&latest_version);
     }
 }
@@ -67,13 +67,14 @@ async fn latest_version() -> RepoRelease {
 }
 
 // ------------ UPDATER PROCESS ------------------
+// TODO: implementation of aarch64-unknown-linux-gnu pending
 fn platform_identifier() -> &'static str {
     match (std::env::consts::OS, std::env::consts::ARCH) {
-        ("linux", "x86_64") => "linux-amd64",
-        ("linux", "aarch64") => "linux-arm64",
-        ("macos", "x86_64") => "darwin-amd64",
-        ("macos", "aarch64") => "darwin-arm64",
-        ("windows", "x86_64") => "windows-amd64",
+        ("linux", "x86_64") => "x86_64-unknown-linux-gnu",
+        ("linux", "aarch64") => "aarch64-unknown-linux-gnu",
+        ("macos", "x86_64") => "x86_64-apple-darwin",
+        ("macos", "aarch64") => "aarch64-apple-darwin",
+        ("windows", "x86_64") => "x86_64-pc-windows-msvc",
         _ => panic!(
             "Plataforma no soportada: {} {}",
             std::env::consts::OS,
@@ -187,11 +188,11 @@ mod tests {
     fn test_platform_identifier_returns_known_value() {
         let platform = platform_identifier();
         let known = [
-            "linux-amd64",
-            "linux-arm64",
-            "darwin-amd64",
-            "darwin-arm64",
-            "windows-amd64",
+            "x86_64-unknown-linux-gnu",
+            "aarch64-unknown-linux-gnu",
+            "x86_64-apple-darwin",
+            "aarch64-apple-darwin",
+            "x86_64-pc-windows-msvc",
         ];
         assert!(
             known.contains(&platform),
@@ -381,10 +382,7 @@ mod tests {
     #[test]
     fn test_download_to_temp_http_error_returns_err() {
         let mut server = mockito::Server::new();
-        let _mock = server
-            .mock("GET", "/asset")
-            .with_status(403)
-            .create();
+        let _mock = server.mock("GET", "/asset").with_status(403).create();
 
         let url = format!("{}/asset", server.url());
         assert!(download_to_temp(&url).is_err());
