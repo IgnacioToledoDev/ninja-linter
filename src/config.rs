@@ -1,13 +1,16 @@
+use chrono::{DateTime, Utc};
+use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{self, Write};
 use std::path::PathBuf;
-use colored::Colorize;
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Config {
     pub test_command: Option<String>,
     pub container_name: Option<String>,
+    #[serde(default)]
+    pub updated_check_at: String,
 }
 
 const CONFIG_DIR: &str = "ninja-linter";
@@ -49,7 +52,9 @@ impl Config {
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read line");
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read line");
         let input = input.trim().to_string();
 
         self.test_command = Some(input.clone());
@@ -70,7 +75,9 @@ impl Config {
         io::stdout().flush().unwrap();
 
         let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read line");
+        io::stdin()
+            .read_line(&mut input)
+            .expect("Failed to read line");
         let input = input.trim().to_string();
 
         self.container_name = Some(input.clone());
@@ -79,6 +86,24 @@ impl Config {
         }
 
         input
+    }
+
+    pub fn set_updated_check_at(&mut self, uca: DateTime<Utc>) {
+        self.updated_check_at = uca.to_rfc3339();
+
+        if let Err(e) = self.save() {
+            eprint!("{}: {}", "Error saving file config".red(), e);
+        }
+    }
+
+    pub fn get_updated_check_at(&self) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(&self.updated_check_at)
+            .unwrap()
+            .with_timezone(&Utc)
+    }
+
+    pub fn has_updated_check_at(&self) -> bool {
+        !self.updated_check_at.is_empty()
     }
 }
 
@@ -111,6 +136,7 @@ mod tests {
         let mut config = Config {
             container_name: Some("my_container".to_string()),
             test_command: None,
+            ..Config::default()
         };
         let name = config.get_or_set_container_name();
         assert_eq!(name, "my_container");
@@ -121,9 +147,13 @@ mod tests {
         let mut config = Config {
             container_name: Some("original_container".to_string()),
             test_command: None,
+            ..Config::default()
         };
         config.get_or_set_container_name();
-        assert_eq!(config.container_name, Some("original_container".to_string()));
+        assert_eq!(
+            config.container_name,
+            Some("original_container".to_string())
+        );
     }
 
     #[test]
@@ -131,6 +161,7 @@ mod tests {
         let config = Config {
             container_name: Some("ninja_symfony".to_string()),
             test_command: None,
+            ..Config::default()
         };
         let json = serde_json::to_string(&config).unwrap();
         assert!(json.contains("ninja_symfony"));
@@ -150,7 +181,10 @@ mod tests {
         let json = r#"{"test_command": "docker exec ninja_symfony bin/phpunit"}"#;
         let config: Config = serde_json::from_str(json).unwrap();
         assert!(config.container_name.is_none());
-        assert_eq!(config.test_command, Some("docker exec ninja_symfony bin/phpunit".to_string()));
+        assert_eq!(
+            config.test_command,
+            Some("docker exec ninja_symfony bin/phpunit".to_string())
+        );
     }
 
     #[test]
@@ -158,10 +192,87 @@ mod tests {
         let original = Config {
             container_name: Some("my_app_container".to_string()),
             test_command: Some("docker exec my_app bin/phpunit".to_string()),
+            ..Config::default()
         };
         let json = serde_json::to_string(&original).unwrap();
         let restored: Config = serde_json::from_str(&json).unwrap();
         assert_eq!(restored.container_name, original.container_name);
         assert_eq!(restored.test_command, original.test_command);
+    }
+
+    // --- updated_check_at ---
+
+    #[test]
+    fn test_config_default_updated_check_at_is_empty() {
+        let config = Config::default();
+        assert!(config.updated_check_at.is_empty());
+    }
+
+    #[test]
+    fn test_has_updated_check_at_false_when_empty() {
+        let config = Config::default();
+        assert!(!config.has_updated_check_at());
+    }
+
+    #[test]
+    fn test_has_updated_check_at_true_when_set() {
+        let config = Config {
+            updated_check_at: "2026-07-07T00:00:00+00:00".to_string(),
+            ..Config::default()
+        };
+        assert!(config.has_updated_check_at());
+    }
+
+    #[test]
+    fn test_set_updated_check_at_stores_rfc3339() {
+        let mut config = Config::default();
+        let dt: chrono::DateTime<Utc> = chrono::DateTime::from_timestamp(0, 0).unwrap();
+        config.updated_check_at = dt.to_rfc3339();
+        assert_eq!(config.updated_check_at, "1970-01-01T00:00:00+00:00");
+    }
+
+    #[test]
+    fn test_get_updated_check_at_roundtrips() {
+        let mut config = Config::default();
+        let dt: chrono::DateTime<Utc> = chrono::DateTime::from_timestamp(1_000_000, 0).unwrap();
+        config.updated_check_at = dt.to_rfc3339();
+        let parsed = config.get_updated_check_at();
+        assert_eq!(parsed, dt);
+    }
+
+    #[test]
+    fn test_config_serializes_updated_check_at() {
+        let config = Config {
+            updated_check_at: "2026-07-07T00:00:00+00:00".to_string(),
+            ..Config::default()
+        };
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("updated_check_at"));
+        assert!(json.contains("2026-07-07T00:00:00+00:00"));
+    }
+
+    #[test]
+    fn test_config_deserializes_updated_check_at() {
+        let json = r#"{"test_command":null,"container_name":null,"updated_check_at":"2026-07-07T00:00:00+00:00"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert_eq!(config.updated_check_at, "2026-07-07T00:00:00+00:00");
+    }
+
+    #[test]
+    fn test_config_backwards_compat_missing_updated_check_at() {
+        let json = r#"{"test_command":null,"container_name":"ninja_symfony"}"#;
+        let config: Config = serde_json::from_str(json).unwrap();
+        assert!(config.updated_check_at.is_empty());
+    }
+
+    #[test]
+    fn test_config_roundtrip_with_updated_check_at() {
+        let original = Config {
+            updated_check_at: "2026-07-07T12:30:00+00:00".to_string(),
+            ..Config::default()
+        };
+        let json = serde_json::to_string(&original).unwrap();
+        let restored: Config = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.updated_check_at, original.updated_check_at);
     }
 }

@@ -18,6 +18,7 @@ reqwest = { version = "0.13.4", features = ["json"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 anyhow = "1.0.103"
 self-replace = "1"
+chrono = "0.4.45"
 
 
 [dev-dependencies]
