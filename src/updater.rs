@@ -195,6 +195,34 @@ async fn start_updater(latest: &RepoRelease) {
         return;
     }
 
+    // Check write access before downloading
+    let current_exe = match std::env::current_exe() {
+        Ok(p) => p,
+        Err(e) => {
+            println!("Cannot determine current executable path: {}", e);
+            return;
+        }
+    };
+    let install_dir = current_exe.parent().unwrap_or(std::path::Path::new("/"));
+    let test_path = install_dir.join(".ninja-linter-write-test");
+    match std::fs::File::create(&test_path) {
+        Ok(_) => {
+            let _ = std::fs::remove_file(&test_path);
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
+            println!(
+                "Cannot update: no write permission on {}.\nRun with sudo: sudo {}",
+                install_dir.display(),
+                current_exe.display()
+            );
+            return;
+        }
+        Err(e) => {
+            println!("Cannot update: {}", e);
+            return;
+        }
+    }
+
     let asset_url = match find_asset_url(latest) {
         Ok(url) => url,
         Err(e) => {
