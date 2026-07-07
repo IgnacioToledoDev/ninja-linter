@@ -1,6 +1,6 @@
 [package]
 name = "ninja-linter"
-version = "0.7.3"
+version = "0.8.3"
 edition = "2024"
 build = "build.rs"
 
@@ -14,10 +14,11 @@ serde_json = "1.0"
 crossterm = "0.29.0"
 ratatui = "0.29"
 dirs = "6.0"
-reqwest = { version = "0.13.4", features = ["json", "blocking"] }
+reqwest = { version = "0.13.4", features = ["json"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 anyhow = "1.0.103"
 self-replace = "1"
+chrono = "0.4.45"
 
 
 [dev-dependencies]
