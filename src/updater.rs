@@ -154,7 +154,7 @@ async fn download_to_temp(url: &str) -> Result<std::path::PathBuf> {
 // TODO: refactor this
 async fn start_updater(latest: &RepoRelease) {
     println!(
-        "New version available: {} → {}. can you update (y/o)",
+        "New version available: {} → {}. can you update (y/n)",
         env!("CARGO_PKG_VERSION"),
         latest.tag_name
     );
