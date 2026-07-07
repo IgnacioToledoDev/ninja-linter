@@ -2,8 +2,26 @@ use std::io;
 use std::io::Write;
 
 use anyhow::{Context, Result, bail};
+use chrono::{Duration, Utc};
 // use colored::Colorize;
 use serde::Deserialize;
+
+use crate::config::Config;
+
+#[derive(Debug)]
+struct Updater {
+    config: Config,
+    can_show_msg: bool,
+}
+
+impl Updater {
+    pub fn new(config: Config, can_show: bool) -> Self {
+        Updater {
+            config,
+            can_show_msg: can_show,
+        }
+    }
+}
 
 #[derive(Deserialize, Debug)]
 struct RepoRelease {
@@ -154,7 +172,7 @@ async fn download_to_temp(url: &str) -> Result<std::path::PathBuf> {
 // TODO: refactor this
 async fn start_updater(latest: &RepoRelease) {
     println!(
-        "New version available: {} → {}. can you update (y/o)",
+        "New version available: {} → {}. can you update (y/n)",
         env!("CARGO_PKG_VERSION"),
         latest.tag_name
     );
@@ -166,6 +184,12 @@ async fn start_updater(latest: &RepoRelease) {
             .expect("Failed to read line");
         buf
     });
+
+    let updater = save_timestap();
+
+    if !updater.can_show_msg {
+        return;
+    }
 
     if user_res.trim().to_lowercase() != "y" {
         return;
@@ -198,6 +222,26 @@ async fn start_updater(latest: &RepoRelease) {
         "Ready: Ninja Linter updated to version: {}",
         &latest.tag_name
     );
+}
+
+fn save_timestap() -> Updater {
+    let config = Config::load();
+    let mut updater = Updater::new(config, false);
+
+    let now = Utc::now();
+    if !updater.config.has_updated_check_at() {
+        // First run — no cooldown stored yet, show immediately
+        updater.can_show_msg = true;
+        updater.config.set_updated_check_at(now + Duration::days(1));
+    } else {
+        let next_check = updater.config.get_updated_check_at();
+        if now >= next_check {
+            updater.can_show_msg = true;
+            updater.config.set_updated_check_at(now + Duration::days(1));
+        }
+    }
+
+    updater
 }
 
 // --------------- test ----------------------
@@ -326,6 +370,30 @@ mod tests {
         };
         let url = find_asset_url(&release).unwrap();
         assert_eq!(url, "https://example.com/correct");
+    }
+
+    // --- Updater ---
+
+    #[test]
+    fn test_updater_new_sets_can_show_true() {
+        let config = Config::default();
+        let updater = Updater::new(config, true);
+        assert!(updater.can_show_msg);
+    }
+
+    #[test]
+    fn test_updater_new_sets_can_show_false() {
+        let config = Config::default();
+        let updater = Updater::new(config, false);
+        assert!(!updater.can_show_msg);
+    }
+
+    #[test]
+    fn test_updater_new_stores_config() {
+        let mut config = Config::default();
+        config.updated_check_at = "2026-07-07 00:00:00 UTC".to_string();
+        let updater = Updater::new(config, false);
+        assert_eq!(updater.config.updated_check_at, "2026-07-07 00:00:00 UTC");
     }
 
     // --- JSON deserialization ---
