@@ -1,10 +1,8 @@
-name: CI / Release
+name: Release
 
 on:
   push:
     tags: ['v*']
-  pull_request:
-    branches: [main, develop]
 
 env:
   CARGO_TERM_COLOR: always
@@ -25,7 +23,6 @@ jobs:
   bump-version:
     name: Bump Version
     needs: [check]
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,6 +39,7 @@ jobs:
         run: sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
 
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
 
       - name: Update Cargo.lock
         run: cargo update -p ninja-linter
@@ -57,7 +55,6 @@ jobs:
   build:
     name: Build (${{ matrix.target }})
     needs: [bump-version]
-    if: startsWith(github.ref, 'refs/tags/v')
     strategy:
       matrix:
         include:
@@ -81,6 +78,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
       - name: Build
         run: cargo build --profile dist --target ${{ matrix.target }}
       - name: Package (Linux / macOS)
@@ -105,7 +105,6 @@ jobs:
   release:
     name: Release
     needs: [build]
-    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
